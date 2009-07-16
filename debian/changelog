@@ -1,11 +1,14 @@
-tor (0.2.0.35-1) unstable; urgency=low
+tor (0.2.0.35-1~lenny1) stable; urgency=low
 
+  * Upload to stable in coordination with SRM (luk).
   * New upstream version:
     o security fixes:
-      - Avoid crashing in the presence of certain malformed descriptors.
+      - Avoid crashing in the presence of certain malformed descriptors
+        (CVE-2009-2425).
       - Fix an edge case where a malicious exit relay could convince a
         controller that the client's DNS question resolves to an internal IP
-        address.
+        address (CVE-2009-2426).
+      - closes: #537148 (both issues above).
     o bugfixes:
       - Finally fix the bug where dynamic-IP relays disappear when their
         IP address changes.
@@ -16,7 +19,7 @@ tor (0.2.0.35-1) unstable; urgency=low
         was older than 15 minutes, but wouldn't fetch a new one either.
     [More details are in the upstream changelog.]
 
- -- Peter Palfrader <weasel@debian.org>  Fri, 26 Jun 2009 01:56:14 +0200
+ -- Peter Palfrader <weasel@debian.org>  Thu, 16 Jul 2009 20:22:28 +0200
 
 tor (0.2.0.34-1) unstable; urgency=high
 
