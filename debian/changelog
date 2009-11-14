@@ -1,3 +1,11 @@
+tor (0.2.1.20-2) unstable; urgency=low
+
+  * Pick ce0a89e2624471272ffc4950c5069d9b81a7f0b9 from maint-0.2.1 git tree:
+    - work with libssl that has renegotiation disabled by default.
+    (debian/patches/ce0a89e2-work-with-reneg-ssl.dpatch)
+
+ -- Peter Palfrader <weasel@debian.org>  Sat, 14 Nov 2009 15:17:29 +0100
+
 tor (0.2.1.20-1) unstable; urgency=low
 
   * New upstream version.
