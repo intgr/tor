@@ -154,6 +154,7 @@ static X509* tor_tls_create_certificate(crypto_pk_env_t *rsa,
                                         const char *cname,
                                         const char *cname_sign,
                                         unsigned int lifetime);
+static void tor_tls_unblock_renegotiation(tor_tls_t *tls);
 
 /** Global tls context. We keep it here because nobody else needs to
  * touch it. */
@@ -565,6 +566,18 @@ tor_tls_context_new(crypto_pk_env_t *identity, unsigned int key_lifetime)
   SSL_CTX_set_options(result->ctx,
                       SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION);
 #endif
+#ifdef SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION
+  /* Yes, we know what we are doing here.  No, we do not treat a renegotiation
+   * as authenticating any earlier-received data.
+   *
+   * (OpenSSL 0.9.8l introdeced SSL3_FLAGS_ALLOW_UNSAGE_LEGACY_RENEGOTIATION
+   * here.  OpenSSL 0.9.8m thoughtfully turned it into an option and (it
+   * seems) broke anything that used SSL3_FLAGS_* for the purpose.  So we need
+   * to do both.)
+   */
+  SSL_CTX_set_options(result->ctx,
+                      SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION);
+#endif
   /* Don't actually allow compression; it uses ram and time, but the data
    * we transmit is all encrypted anyway. */
   if (result->ctx->comp_methods)
@@ -904,6 +917,36 @@ tor_tls_set_renegotiate_callback(tor_tls_t *tls,
 #endif
 }
 
+/** If this version of openssl requires it, turn on renegotiation on
+ * <b>tls</b>.  (Our protocol never requires this for security, but it's nice
+ * to use belt-and-suspenders here.)
+ */
+static void
+tor_tls_unblock_renegotiation(tor_tls_t *tls)
+{
+#ifdef SSL3_FLAGS_ALLOW_UNSAFE_LEGACY_RENEGOTIATION
+  /* Yes, we know what we are doing here.  No, we do not treat a renegotiation
+   * as authenticating any earlier-received data. */
+  tls->ssl->s3->flags |= SSL3_FLAGS_ALLOW_UNSAFE_LEGACY_RENEGOTIATION;
+#else
+  (void)tls;
+#endif
+}
+
+/** If this version of openssl supports it, turn off renegotiation on
+ * <b>tls</b>.  (Our protocol never requires this for security, but it's nice
+ * to use belt-and-suspenders here.)
+ */
+void
+tor_tls_block_renegotiation(tor_tls_t *tls)
+{
+#ifdef SSL3_FLAGS_ALLOW_UNSAFE_LEGACY_RENEGOTIATION
+  tls->ssl->s3->flags &= ~SSL3_FLAGS_ALLOW_UNSAFE_LEGACY_RENEGOTIATION;
+#else
+  (void)tls;
+#endif
+}
+
 /** Return whether this tls initiated the connect (client) or
  * received it (server). */
 int
@@ -1026,6 +1069,9 @@ tor_tls_handshake(tor_tls_t *tls)
   } else {
     r = SSL_connect(tls->ssl);
   }
+  /* We need to call this here and not earlier, since OpenSSL has a penchant
+   * for clearing its flags when you say accept or connect. */
+  tor_tls_unblock_renegotiation(tls);
   r = tor_tls_get_error(tls,r,0, "handshaking", LOG_INFO);
   if (ERR_peek_error() != 0) {
     tls_log_errors(tls, tls->isServer ? LOG_INFO : LOG_WARN,

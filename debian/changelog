@@ -1,3 +1,11 @@
+tor (0.2.1.21-1) unstable; urgency=low
+
+  * New upstream version.
+  * Drop patches/ce0a89e2-work-with-reneg-ssl.dpatch (already in
+    upstream).
+
+ -- Peter Palfrader <weasel@debian.org>  Tue, 29 Dec 2009 14:55:32 +0100
+
 tor (0.2.1.20-2) unstable; urgency=low
 
   * Pick ce0a89e2624471272ffc4950c5069d9b81a7f0b9 from maint-0.2.1 git tree:
