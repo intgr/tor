@@ -929,7 +929,7 @@ handle_control_loadconf(control_connection_t *conn, uint32_t len,
         tor_fragile_assert();
         break;
     }
-    if (*errstring)
+    if (errstring)
       connection_printf_to_buf(conn, "%s: %s\r\n", msg, errstring);
     else
       connection_printf_to_buf(conn, "%s\r\n", msg);
@@ -1536,6 +1536,7 @@ getinfo_helper_dir(control_connection_t *control_conn,
     if (res) {
       log_warn(LD_CONTROL, "getinfo '%s': %s", question, msg);
       smartlist_free(descs);
+      tor_free(url);
       return -1;
     }
     SMARTLIST_FOREACH(descs, signed_descriptor_t *, sd,

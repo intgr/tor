@@ -1,4 +1,43 @@
+Changes in version 0.2.1.21 - 2009-12-21
+  Tor 0.2.1.21 fixes an incompatibility with the most recent OpenSSL
+  library. If you use Tor on Linux / Unix and you're getting SSL
+  renegotiation errors, upgrading should help. We also recommend an
+  upgrade if you're an exit relay.
+
+  o Major bugfixes:
+    - Work around a security feature in OpenSSL 0.9.8l that prevents our
+      handshake from working unless we explicitly tell OpenSSL that we
+      are using SSL renegotiation safely. We are, of course, but OpenSSL
+      0.9.8l won't work unless we say we are.
+    - Avoid crashing if the client is trying to upload many bytes and the
+      circuit gets torn down at the same time, or if the flip side
+      happens on the exit relay. Bugfix on 0.2.0.1-alpha; fixes bug 1150.
+
+  o Minor bugfixes:
+    - Do not refuse to learn about authority certs and v2 networkstatus
+      documents that are older than the latest consensus. This bug might
+      have degraded client bootstrapping. Bugfix on 0.2.0.10-alpha.
+      Spotted and fixed by xmux.
+    - Fix a couple of very-hard-to-trigger memory leaks, and one hard-to-
+      trigger platform-specific option misparsing case found by Coverity
+      Scan.
+    - Fix a compilation warning on Fedora 12 by removing an impossible-to-
+      trigger assert. Fixes bug 1173.
+
+
 Changes in version 0.2.1.20 - 2009-10-15
+  Tor 0.2.1.20 fixes a crash bug when you're accessing many hidden
+  services at once, prepares for more performance improvements, and
+  fixes a bunch of smaller bugs.
+
+  The Windows and OS X bundles also include a more recent Vidalia,
+  and switch from Privoxy to Polipo.
+
+  The OS X installers are now drag and drop. It's best to un-install
+  Tor/Vidalia and then install this new bundle, rather than upgrade. If
+  you want to upgrade, you'll need to update the paths for Tor and Polipo
+  in the Vidalia Settings window.
+
   o Major bugfixes:
     - Send circuit or stream sendme cells when our window has decreased
       by 100 cells, not when it has decreased by 101 cells. Bug uncovered
