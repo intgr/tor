@@ -1,3 +1,12 @@
+tor (0.2.1.22-1) unstable; urgency=medium
+
+  * New upstream version.
+    - Rotate keys (both v3 identity and relay identity) for moria1
+      and gabelmoo.
+    [and more]
+
+ -- Peter Palfrader <weasel@debian.org>  Wed, 20 Jan 2010 18:58:12 +0100
+
 tor (0.2.1.21-1) unstable; urgency=low
 
   * New upstream version.
