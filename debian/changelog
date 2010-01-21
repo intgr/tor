@@ -3,8 +3,11 @@ tor (0.2.0.35-1~lenny2) stable; urgency=medium
   * Two of the authority keys 0.2.0.35 ships with got rotated recently.
     To make sure Tor keeps working, update the list of authorities to
     the list shipped in 0.2.1.22 and 0.2.2.7-alpha.
+  * Fix race condition that can cause crashes at client or exit relay
+    (closes: #557654). (Backport from 0.2.1.x, original commit id:
+    a89f51c936f8bd3c2aef3e9472d5310c83dc8fa7.)
 
- -- Peter Palfrader <weasel@debian.org>  Thu, 21 Jan 2010 14:24:45 +0100
+ -- Peter Palfrader <weasel@debian.org>  Thu, 21 Jan 2010 14:27:32 +0100
 
 tor (0.2.0.35-1~lenny1) stable; urgency=low
 

@@ -1,0 +1,37 @@
+#! /bin/sh /usr/share/dpatch/dpatch-run
+## backport-83dc8fa7.dpatch by  <weasel@debian.org>
+##
+## All lines beginning with `## DP:' are a description of the patch.
+## DP: fix race condition that can cause crashes at client or exit relay
+
+# taken from 0.2.1.x tree:
+#commit a89f51c936f8bd3c2aef3e9472d5310c83dc8fa7
+#Author: Roger Dingledine <arma@torproject.org>
+#Date:   Mon Nov 23 10:13:50 2009 -0500
+#
+#    fix race condition that can cause crashes at client or exit relay
+#
+#    Avoid crashing if the client is trying to upload many bytes and the
+#    circuit gets torn down at the same time, or if the flip side
+#    happens on the exit relay. Bugfix on 0.2.0.1-alpha; fixes bug 1150.
+
+@DPATCH@
+diff -urNad tor~/src/or/circuitlist.c tor/src/or/circuitlist.c
+--- tor~/src/or/circuitlist.c	2010-01-21 14:18:29.000000000 +0100
++++ tor/src/or/circuitlist.c	2010-01-21 14:22:10.715060262 +0100
+@@ -1037,6 +1037,7 @@
+     edge_connection_t *conn;
+     for (conn=or_circ->n_streams; conn; conn=conn->next_stream)
+       connection_edge_destroy(or_circ->p_circ_id, conn);
++    or_circ->n_streams = NULL;
+ 
+     while (or_circ->resolving_streams) {
+       conn = or_circ->resolving_streams;
+@@ -1060,6 +1061,7 @@
+     edge_connection_t *conn;
+     for (conn=ocirc->p_streams; conn; conn=conn->next_stream)
+       connection_edge_destroy(circ->n_circ_id, conn);
++    ocirc->p_streams = NULL;
+   }
+ 
+   circ->marked_for_close = line;
