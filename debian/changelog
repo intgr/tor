@@ -1,8 +1,13 @@
 tor (0.2.1.23-1) unstable; urgency=low
 
   * New upstream version.
+    - We no longer need to build-depend on a recent libssl-dev because
+      Tor now detects whether we need to explicitly turn on
+      autonegotiation at run-time rather than compile time.  Good.
+      (This also means we no longer need to conflict with newer
+       libssls when we built against an old one on backports.)
 
- -- Peter Palfrader <weasel@debian.org>  Sun, 14 Feb 2010 09:47:29 +0100
+ -- Peter Palfrader <weasel@debian.org>  Sun, 14 Feb 2010 09:50:41 +0100
 
 tor (0.2.1.22-1) unstable; urgency=medium
 
