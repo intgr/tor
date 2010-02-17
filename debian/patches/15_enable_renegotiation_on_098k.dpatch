@@ -1,0 +1,38 @@
+#! /bin/sh -e
+## DP: Enable ssl renegotiation also on 0.9.8k.
+
+if [ $# -lt 1 ]; then
+    echo "`basename $0`: script expects -patch|-unpatch as argument" >&2
+    exit 1
+fi
+
+[ -f debian/patches/00patch-opts ] && . debian/patches/00patch-opts
+patch_opts="${patch_opts:--f --no-backup-if-mismatch} ${2:+-d $2}"
+
+case "$1" in
+    -patch) patch -p1 ${patch_opts} < $0;;
+    -unpatch) patch -R -p1 ${patch_opts} < $0;;
+    *)
+        echo "`basename $0`: script expects -patch|-unpatch as argument" >&2
+        exit 1;;
+esac
+
+exit 0
+
+@DPATCH@
+diff -urNad tor~/src/common/tortls.c tor/src/common/tortls.c
+--- tor~/src/common/tortls.c	2010-02-17 08:48:30.000000000 +0100
++++ tor/src/common/tortls.c	2010-02-17 10:48:44.093003191 +0100
+@@ -355,8 +355,11 @@
+      * Yes, it _is_ almost as if the OpenSSL developers decided that no
+      * program should be allowed to use renegotiation its first passed an
+      * test of intelligence and determination.
++     *
++     * Debian helpfully backported this "feature" to their 0.9.8k-6 version.
++     * http://packages.debian.org/changelogs/pool/main/o/openssl/openssl_0.9.8k-8/changelog#versionversion0.9.8k-6
+      */
+-    if (version >= 0x009080c0L && version < 0x009080d0L) {
++    if (version >= 0x009080bfL && version < 0x009080d0L) {
+       log_notice(LD_GENERAL, "OpenSSL %s looks like version 0.9.8l; "
+                  "I will try SSL3_FLAGS  to enable renegotation.",
+                  SSLeay_version(SSLEAY_VERSION));
