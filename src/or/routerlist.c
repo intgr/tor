@@ -1,7 +1,7 @@
 /* Copyright (c) 2001 Matej Pfajfar.
  * Copyright (c) 2001-2004, Roger Dingledine.
  * Copyright (c) 2004-2006, Roger Dingledine, Nick Mathewson.
- * Copyright (c) 2007-2009, The Tor Project, Inc. */
+ * Copyright (c) 2007-2010, The Tor Project, Inc. */
 /* See LICENSE for licensing information */
 
 /**
@@ -576,8 +576,6 @@ signed_desc_append_to_journal(signed_descriptor_t *desc,
   char *fname = get_datadir_fname_suffix(store->fname_base, ".new");
   const char *body = signed_descriptor_get_body_impl(desc,1);
   size_t len = desc->signed_descriptor_len + desc->annotations_len;
-
-  tor_assert(len == strlen(body));
 
   if (append_bytes_to_file(fname, body, len, 1)) {
     log_warn(LD_FS, "Unable to store router descriptor");

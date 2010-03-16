@@ -1,7 +1,7 @@
 /* Copyright (c) 2001, Matej Pfajfar.
  * Copyright (c) 2001-2004, Roger Dingledine.
  * Copyright (c) 2004-2006, Roger Dingledine, Nick Mathewson.
- * Copyright (c) 2007-2009, The Tor Project, Inc. */
+ * Copyright (c) 2007-2010, The Tor Project, Inc. */
 /* See LICENSE for licensing information */
 
 /**
@@ -267,7 +267,7 @@ aes_free_cipher(aes_cnt_cipher_t *cipher)
 #ifdef USE_OPENSSL_EVP
   EVP_CIPHER_CTX_cleanup(&cipher->key);
 #endif
-  memset(cipher, 0, sizeof(cipher));
+  memset(cipher, 0, sizeof(aes_cnt_cipher_t));
   tor_free(cipher);
 }
 
