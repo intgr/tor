@@ -1,3 +1,9 @@
+tor (0.2.1.25-1) unstable; urgency=low
+
+  * New upstream version.
+
+ -- Peter Palfrader <weasel@debian.org>  Tue, 16 Mar 2010 13:31:38 +0100
+
 tor (0.2.1.23-2) unstable; urgency=low
 
   * Enable ssl renegotiation also on 0.9.8k (closes: #570197).
