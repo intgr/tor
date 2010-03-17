@@ -1,6 +1,6 @@
 /* Copyright (c) 2001-2004, Roger Dingledine.
  * Copyright (c) 2004-2006, Roger Dingledine, Nick Mathewson.
- * Copyright (c) 2007-2009, The Tor Project, Inc. */
+ * Copyright (c) 2007-2010, The Tor Project, Inc. */
 /* See LICENSE for licensing information */
 
 /* Ordinarily defined in tor_main.c; this bit is just here to provide one
@@ -1294,6 +1294,7 @@ test_util(void)
     smartlist_free(sl);
   }
 
+  tor_gettimeofday(&start);
   /* now make sure time works. */
   tor_gettimeofday(&end);
   /* We might've timewarped a little. */
