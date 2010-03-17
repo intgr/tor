@@ -2,8 +2,10 @@ tor (0.2.1.25-1) unstable; urgency=low
 
   * New upstream version.
     - Obsoletes patches/15_enable_renegotiation_on_098k.
+  * Change order of recommends from privoxy | polipo to polipo | privoxy.
+    [change done in experimental (0.2.2.x) long ago).
 
- -- Peter Palfrader <weasel@debian.org>  Tue, 16 Mar 2010 13:32:23 +0100
+ -- Peter Palfrader <weasel@debian.org>  Wed, 17 Mar 2010 23:20:32 +0100
 
 tor (0.2.1.23-2) unstable; urgency=low
 
