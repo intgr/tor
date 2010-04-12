@@ -1,3 +1,18 @@
+tor (0.2.1.25-3) unstable; urgency=low
+
+  * Minor bugfixes to make the testsuite work on our new Octeon machines:
+    (taken from upstream's maint-0.2.1 branch)
+    - Testsuite:  In the util/threads test no longer free the test_mutex
+      before all worker threads have finished.
+    - Testsuite:  The master thread could starve the worker threads quite
+      badly on certain systems, causing them to run only partially in
+      the allowed window.  This resulted in test failures.  Now the master
+      thread sleeps occasionally for a few microseconds while the two
+      worker-threads compete for the mutex.
+    (both in debian/patches/15_testuite-thread-fixes)
+
+ -- Peter Palfrader <weasel@debian.org>  Tue, 13 Apr 2010 00:44:39 +0200
+
 tor (0.2.1.25-2) unstable; urgency=low
 
   * In /etc/default/tor also source /etc/default/tor.vidalia if it exists

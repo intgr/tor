@@ -1,0 +1,62 @@
+#! /bin/sh -e
+## 15_testuite-thread-fixes.dpatch by <weasel@debian.org>, taken from upstream
+##
+## All lines beginning with `## DP:' are a description of the patch.
+## DP: Change geoipdb open failed message
+
+if [ $# -lt 1 ]; then
+    echo "`basename $0`: script expects -patch|-unpatch as argument" >&2
+    exit 1
+fi
+
+[ -f debian/patches/00patch-opts ] && . debian/patches/00patch-opts
+patch_opts="${patch_opts:--f --no-backup-if-mismatch} ${2:+-d $2}"
+
+case "$1" in
+    -patch) patch -p1 ${patch_opts} < $0;;
+    -unpatch) patch -R -p1 ${patch_opts} < $0;;
+    *)
+        echo "`basename $0`: script expects -patch|-unpatch as argument" >&2
+        exit 1;;
+esac
+
+exit 0
+
+@DPATCH@
+diff --git a/src/or/test.c b/src/or/test.c
+index 6b7066c..14ba953 100644
+--- a/src/or/test.c
++++ b/src/or/test.c
+@@ -2326,6 +2326,11 @@ test_util_threads(void)
+   char *s1 = NULL, *s2 = NULL;
+   int done = 0, timedout = 0;
+   time_t started;
++#ifndef MS_WINDOWS
++  struct timeval tv;
++  tv.tv_sec=0;
++  tv.tv_usec=10;
++#endif
+ #ifndef TOR_IS_MULTITHREADED
+   /* Skip this test if we aren't threading. We should be threading most
+    * everywhere by now. */
+@@ -2355,14 +2360,19 @@ test_util_threads(void)
+       timedout = done = 1;
+     }
+     tor_mutex_release(_thread_test_mutex);
++#ifndef MS_WINDOWS
++    /* Prevent the main thread from starving the worker threads. */
++    select(0, NULL, NULL, NULL, &tv);
++#endif
+   }
+-  tor_mutex_free(_thread_test_mutex);
+ 
+   tor_mutex_acquire(_thread_test_start1);
+   tor_mutex_release(_thread_test_start1);
+   tor_mutex_acquire(_thread_test_start2);
+   tor_mutex_release(_thread_test_start2);
+ 
++  tor_mutex_free(_thread_test_mutex);
++
+   if (timedout) {
+     printf("\nTimed out: %d %d", t1_count, t2_count);
+     test_assert(strmap_get(_thread_test_strmap, "thread 1"));
