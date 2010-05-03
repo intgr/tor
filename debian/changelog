@@ -1,8 +1,9 @@
 tor (0.2.1.26-1) unstable; urgency=low
 
   * New upstream version.
+  * Remove debian/patches/15_testuite-thread-fixes (merged upstream).
 
- -- Peter Palfrader <weasel@debian.org>  Mon, 03 May 2010 18:59:53 +0200
+ -- Peter Palfrader <weasel@debian.org>  Mon, 03 May 2010 19:00:36 +0200
 
 tor (0.2.1.25-3) unstable; urgency=low
 
