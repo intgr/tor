@@ -2834,6 +2834,8 @@ int circuit_conforms_to_options(const origin_circuit_t *circ,
 void circuit_build_needed_circs(time_t now);
 void circuit_detach_stream(circuit_t *circ, edge_connection_t *conn);
 
+void circuit_expire_old_circuits_serverside(time_t now);
+
 void reset_bandwidth_test(void);
 int circuit_enough_testing_circs(void);
 
@@ -4227,13 +4229,11 @@ int authdir_mode_publishes_statuses(or_options_t *options);
 int authdir_mode_tests_reachability(or_options_t *options);
 int authdir_mode_bridge(or_options_t *options);
 
-int clique_mode(or_options_t *options);
 int server_mode(or_options_t *options);
 int advertised_server_mode(void);
 int proxy_mode(or_options_t *options);
 void consider_publishable_server(int force);
 
-int router_is_clique_mode(routerinfo_t *router);
 void router_upload_dir_desc_to_dirservers(int force);
 void mark_my_descriptor_dirty_if_older_than(time_t when);
 void mark_my_descriptor_dirty(void);
