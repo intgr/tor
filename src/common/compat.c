@@ -1379,12 +1379,6 @@ switch_id(const char *user)
   if (have_already_switched_id)
     return 0;
 
-  /* Log the initial credential state */
-  if (log_credential_status())
-    return -1;
-
-  log_fn(CREDENTIAL_LOG_LEVEL, LD_GENERAL, "Changing user and groups");
-
   /* Get old UID/GID to check if we changed correctly */
   old_uid = getuid();
   old_gid = getgid();
@@ -1396,20 +1390,26 @@ switch_id(const char *user)
     return -1;
   }
 
+  /* There's no need to do anything if we're already who we want to be. */
+  if (
+    (pw->pw_uid == old_uid) && (pw->pw_uid == geteuid()) &&
+    (pw->pw_gid == old_gid) && (pw->pw_gid == getegid())
+  ) {
+    return 0;
+  }
+
+  /* Log the initial credential state */
+  if (log_credential_status())
+    return -1;
+
+  log_fn(CREDENTIAL_LOG_LEVEL, LD_GENERAL, "Changing user and groups");
+
   /* Properly switch egid,gid,euid,uid here or bail out */
   if (setgroups(1, &pw->pw_gid)) {
     log_warn(LD_GENERAL, "Error setting groups to gid %d: \"%s\".",
              (int)pw->pw_gid, strerror(errno));
-    if (old_uid == pw->pw_uid) {
-      log_warn(LD_GENERAL, "Tor is already running as %s.  You do not need "
-               "the \"User\" option if you are already running as the user "
-               "you want to be.  (If you did not set the User option in your "
-               "torrc, check whether it was specified on the command line "
-               "by a startup script.)", user);
-    } else {
-      log_warn(LD_GENERAL, "If you set the \"User\" option, you must start Tor"
-               " as root.");
-    }
+    log_warn(LD_GENERAL, "If you set the \"User\" option, you must start Tor"
+	      " as root.");
     return -1;
   }
 
