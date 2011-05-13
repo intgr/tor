@@ -43,12 +43,16 @@ typedef enum config_type_t {
   CONFIG_TYPE_STRING = 0,   /**< An arbitrary string. */
   CONFIG_TYPE_FILENAME,     /**< A filename: some prefixes get expanded. */
   CONFIG_TYPE_UINT,         /**< A non-negative integer less than MAX_INT */
+  CONFIG_TYPE_PORT,         /**< A port from 1...65535, 0 for "not set", or
+                             * "auto".  */
   CONFIG_TYPE_INTERVAL,     /**< A number of seconds, with optional units*/
   CONFIG_TYPE_MSEC_INTERVAL,/**< A number of milliseconds, with optional
                               * units */
   CONFIG_TYPE_MEMUNIT,      /**< A number of bytes, with optional units*/
   CONFIG_TYPE_DOUBLE,       /**< A floating-point value */
   CONFIG_TYPE_BOOL,         /**< A boolean value, expressed as 0 or 1. */
+  CONFIG_TYPE_AUTOBOOL,     /**< A boolean+auto value, expressed 0 for false,
+                             * 1 for true, and -1 for auto  */
   CONFIG_TYPE_ISOTIME,      /**< An ISO-formatted time relative to GMT. */
   CONFIG_TYPE_CSV,          /**< A list of strings, separated by commas and
                               * optional whitespace. */
@@ -206,7 +210,9 @@ static config_var_t _option_vars[] = {
   V(ConstrainedSockSize,         MEMUNIT,  "8192"),
   V(ContactInfo,                 STRING,   NULL),
   V(ControlListenAddress,        LINELIST, NULL),
-  V(ControlPort,                 UINT,     "0"),
+  V(ControlPort,                 PORT,     "0"),
+  V(ControlPortFileGroupReadable,BOOL,     "0"),
+  V(ControlPortWriteToFile,      FILENAME, NULL),
   V(ControlSocket,               LINELIST, NULL),
   V(CookieAuthentication,        BOOL,     "0"),
   V(CookieAuthFileGroupReadable, BOOL,     "0"),
@@ -219,7 +225,7 @@ static config_var_t _option_vars[] = {
   V(DirListenAddress,            LINELIST, NULL),
   OBSOLETE("DirFetchPeriod"),
   V(DirPolicy,                   LINELIST, NULL),
-  V(DirPort,                     UINT,     "0"),
+  V(DirPort,                     PORT,     "0"),
   V(DirPortFrontPage,            FILENAME, NULL),
   OBSOLETE("DirPostPeriod"),
   OBSOLETE("DirRecordUsageByCountry"),
@@ -230,7 +236,7 @@ static config_var_t _option_vars[] = {
   VAR("DirServer",               LINELIST, DirServers, NULL),
   V(DisableAllSwap,              BOOL,     "0"),
   V(DisableIOCP,                 BOOL,     "1"),
-  V(DNSPort,                     UINT,     "0"),
+  V(DNSPort,                     PORT,     "0"),
   V(DNSListenAddress,            LINELIST, NULL),
   V(DownloadExtraInfo,           BOOL,     "0"),
   V(EnforceDistinctSubnets,      BOOL,     "1"),
@@ -260,6 +266,7 @@ static config_var_t _option_vars[] = {
   V(FetchServerDescriptors,      BOOL,     "1"),
   V(FetchHidServDescriptors,     BOOL,     "1"),
   V(FetchUselessDescriptors,     BOOL,     "0"),
+  V(FetchV2Networkstatus,        BOOL,     "0"),
 #ifdef WIN32
   V(GeoIPFile,                   FILENAME, "<default>"),
 #else
@@ -310,7 +317,7 @@ static config_var_t _option_vars[] = {
   V(NewCircuitPeriod,            INTERVAL, "30 seconds"),
   VAR("NamingAuthoritativeDirectory",BOOL, NamingAuthoritativeDir, "0"),
   V(NATDListenAddress,           LINELIST, NULL),
-  V(NATDPort,                    UINT,     "0"),
+  V(NATDPort,                    PORT,     "0"),
   V(Nickname,                    STRING,   NULL),
   V(WarnUnsafeSocks,              BOOL,     "1"),
   OBSOLETE("NoPublish"),
@@ -318,7 +325,7 @@ static config_var_t _option_vars[] = {
   V(NumCPUs,                     UINT,     "0"),
   V(NumEntryGuards,              UINT,     "3"),
   V(ORListenAddress,             LINELIST, NULL),
-  V(ORPort,                      UINT,     "0"),
+  V(ORPort,                      PORT,     "0"),
   V(OutboundBindAddress,         STRING,   NULL),
   OBSOLETE("PathlenCoinWeight"),
   V(PerConnBWBurst,              MEMUNIT,  "0"),
@@ -338,7 +345,7 @@ static config_var_t _option_vars[] = {
   V(RecommendedClientVersions,   LINELIST, NULL),
   V(RecommendedServerVersions,   LINELIST, NULL),
   OBSOLETE("RedirectExit"),
-  V(RefuseUnknownExits,          STRING,   "auto"),
+  V(RefuseUnknownExits,          AUTOBOOL, "auto"),
   V(RejectPlaintextPorts,        CSV,      ""),
   V(RelayBandwidthBurst,         MEMUNIT,  "0"),
   V(RelayBandwidthRate,          MEMUNIT,  "0"),
@@ -363,7 +370,7 @@ static config_var_t _option_vars[] = {
   V(ShutdownWaitLength,          INTERVAL, "30 seconds"),
   V(SocksListenAddress,          LINELIST, NULL),
   V(SocksPolicy,                 LINELIST, NULL),
-  V(SocksPort,                   UINT,     "9050"),
+  V(SocksPort,                   PORT,     "9050"),
   V(SocksTimeout,                INTERVAL, "2 minutes"),
   OBSOLETE("StatusFetchPeriod"),
   V(StrictNodes,                 BOOL,     "0"),
@@ -374,11 +381,12 @@ static config_var_t _option_vars[] = {
   V(TrackHostExitsExpire,        INTERVAL, "30 minutes"),
   OBSOLETE("TrafficShaping"),
   V(TransListenAddress,          LINELIST, NULL),
-  V(TransPort,                   UINT,     "0"),
+  V(TransPort,                   PORT,     "0"),
   V(TunnelDirConns,              BOOL,     "1"),
   V(UpdateBridgesFromAuthority,  BOOL,     "0"),
   V(UseBridges,                  BOOL,     "0"),
   V(UseEntryGuards,              BOOL,     "1"),
+  V(UseMicrodescriptors,         AUTOBOOL, "0"),
   V(User,                        STRING,   NULL),
   VAR("V1AuthoritativeDirectory",BOOL, V1AuthoritativeDir,   "0"),
   VAR("V2AuthoritativeDirectory",BOOL, V2AuthoritativeDir,   "0"),
@@ -559,7 +567,7 @@ static void config_register_addressmaps(or_options_t *options);
 
 static int parse_bridge_line(const char *line, int validate_only);
 static int parse_dir_server_line(const char *line,
-                                 authority_type_t required_type,
+                                 dirinfo_type_t required_type,
                                  int validate_only);
 static int validate_data_directory(or_options_t *options);
 static int write_configuration_file(const char *fname, or_options_t *options);
@@ -572,7 +580,7 @@ static int or_state_validate(or_state_t *old_options, or_state_t *options,
 static int or_state_load(void);
 static int options_init_logs(or_options_t *options, int validate_only);
 
-static int is_listening_on_low_port(uint16_t port_option,
+static int is_listening_on_low_port(int port_option,
                                     const config_line_t *listen_options);
 
 static uint64_t config_parse_memunit(const char *s, int *ok);
@@ -799,7 +807,7 @@ escaped_safe_str(const char *address)
 /** Add the default directory authorities directly into the trusted dir list,
  * but only add them insofar as they share bits with <b>type</b>. */
 static void
-add_default_trusted_dir_authorities(authority_type_t type)
+add_default_trusted_dir_authorities(dirinfo_type_t type)
 {
   int i;
   const char *dirservers[] = {
@@ -873,16 +881,16 @@ validate_dir_authorities(or_options_t *options, or_options_t *old_options)
   /* Now go through the four ways you can configure an alternate
    * set of directory authorities, and make sure none are broken. */
   for (cl = options->DirServers; cl; cl = cl->next)
-    if (parse_dir_server_line(cl->value, NO_AUTHORITY, 1)<0)
+    if (parse_dir_server_line(cl->value, NO_DIRINFO, 1)<0)
       return -1;
   for (cl = options->AlternateBridgeAuthority; cl; cl = cl->next)
-    if (parse_dir_server_line(cl->value, NO_AUTHORITY, 1)<0)
+    if (parse_dir_server_line(cl->value, NO_DIRINFO, 1)<0)
       return -1;
   for (cl = options->AlternateDirAuthority; cl; cl = cl->next)
-    if (parse_dir_server_line(cl->value, NO_AUTHORITY, 1)<0)
+    if (parse_dir_server_line(cl->value, NO_DIRINFO, 1)<0)
       return -1;
   for (cl = options->AlternateHSAuthority; cl; cl = cl->next)
-    if (parse_dir_server_line(cl->value, NO_AUTHORITY, 1)<0)
+    if (parse_dir_server_line(cl->value, NO_DIRINFO, 1)<0)
       return -1;
   return 0;
 }
@@ -913,27 +921,28 @@ consider_adding_dir_authorities(or_options_t *options,
 
   if (!options->DirServers) {
     /* then we may want some of the defaults */
-    authority_type_t type = NO_AUTHORITY;
+    dirinfo_type_t type = NO_DIRINFO;
     if (!options->AlternateBridgeAuthority)
-      type |= BRIDGE_AUTHORITY;
+      type |= BRIDGE_DIRINFO;
     if (!options->AlternateDirAuthority)
-      type |= V1_AUTHORITY | V2_AUTHORITY | V3_AUTHORITY;
+      type |= V1_DIRINFO | V2_DIRINFO | V3_DIRINFO | EXTRAINFO_DIRINFO |
+        MICRODESC_DIRINFO;
     if (!options->AlternateHSAuthority)
-      type |= HIDSERV_AUTHORITY;
+      type |= HIDSERV_DIRINFO;
     add_default_trusted_dir_authorities(type);
   }
 
   for (cl = options->DirServers; cl; cl = cl->next)
-    if (parse_dir_server_line(cl->value, NO_AUTHORITY, 0)<0)
+    if (parse_dir_server_line(cl->value, NO_DIRINFO, 0)<0)
       return -1;
   for (cl = options->AlternateBridgeAuthority; cl; cl = cl->next)
-    if (parse_dir_server_line(cl->value, NO_AUTHORITY, 0)<0)
+    if (parse_dir_server_line(cl->value, NO_DIRINFO, 0)<0)
       return -1;
   for (cl = options->AlternateDirAuthority; cl; cl = cl->next)
-    if (parse_dir_server_line(cl->value, NO_AUTHORITY, 0)<0)
+    if (parse_dir_server_line(cl->value, NO_DIRINFO, 0)<0)
       return -1;
   for (cl = options->AlternateHSAuthority; cl; cl = cl->next)
-    if (parse_dir_server_line(cl->value, NO_AUTHORITY, 0)<0)
+    if (parse_dir_server_line(cl->value, NO_DIRINFO, 0)<0)
       return -1;
   return 0;
 }
@@ -1270,18 +1279,6 @@ options_act(or_options_t *old_options)
       old_options->RelayBandwidthBurst != options->RelayBandwidthBurst)
     connection_bucket_init();
 #endif
-
-  /* parse RefuseUnknownExits tristate */
-  if (!strcmp(options->RefuseUnknownExits, "0"))
-    options->RefuseUnknownExits_ = 0;
-  else if (!strcmp(options->RefuseUnknownExits, "1"))
-    options->RefuseUnknownExits_ = 1;
-  else if (!strcmp(options->RefuseUnknownExits, "auto"))
-    options->RefuseUnknownExits_ = -1;
-  else {
-    /* Should have caught this in options_validate */
-    return -1;
-  }
 
   /* Change the cell EWMA settings */
   cell_ewma_set_scale_factor(options, networkstatus_get_latest_consensus());
@@ -1730,8 +1727,16 @@ config_assign_value(config_format_t *fmt, or_options_t *options,
 
   switch (var->type) {
 
+  case CONFIG_TYPE_PORT:
+    if (!strcasecmp(c->value, "auto")) {
+      *(int *)lvalue = CFG_AUTO_PORT;
+      break;
+    }
+    /* fall through */
   case CONFIG_TYPE_UINT:
-    i = (int)tor_parse_long(c->value, 10, 0, INT_MAX, &ok, NULL);
+    i = (int)tor_parse_long(c->value, 10, 0,
+                            var->type==CONFIG_TYPE_PORT ? 65535 : INT_MAX,
+                            &ok, NULL);
     if (!ok) {
       tor_asprintf(msg,
           "Int keyword '%s %s' is malformed or out of bounds.",
@@ -1786,6 +1791,20 @@ config_assign_value(config_format_t *fmt, or_options_t *options,
       return -1;
     }
     *(int *)lvalue = i;
+    break;
+
+  case CONFIG_TYPE_AUTOBOOL:
+    if (!strcmp(c->value, "auto"))
+      *(int *)lvalue = -1;
+    else if (!strcmp(c->value, "0"))
+      *(int *)lvalue = 0;
+    else if (!strcmp(c->value, "1"))
+      *(int *)lvalue = 1;
+    else {
+      tor_asprintf(msg, "Boolean '%s %s' expects 0, 1, or 'auto'.",
+                   c->key, c->value);
+      return -1;
+    }
     break;
 
   case CONFIG_TYPE_STRING:
@@ -2051,6 +2070,12 @@ get_assigned_option(config_format_t *fmt, void *options,
       }
       escape_val = 0; /* Can't need escape. */
       break;
+    case CONFIG_TYPE_PORT:
+      if (*(int*)value == CFG_AUTO_PORT) {
+        result->value = tor_strdup("auto");
+        escape_val = 0;
+        break;
+      }
     case CONFIG_TYPE_INTERVAL:
     case CONFIG_TYPE_MSEC_INTERVAL:
     case CONFIG_TYPE_UINT:
@@ -2068,6 +2093,14 @@ get_assigned_option(config_format_t *fmt, void *options,
       tor_asprintf(&result->value, "%f", *(double*)value);
       escape_val = 0; /* Can't need escape. */
       break;
+
+    case CONFIG_TYPE_AUTOBOOL:
+      if (*(int*)value == -1) {
+        result->value = tor_strdup("auto");
+        escape_val = 0;
+        break;
+      }
+      /* fall through */
     case CONFIG_TYPE_BOOL:
       result->value = tor_strdup(*(int*)value ? "1" : "0");
       escape_val = 0; /* Can't need escape. */
@@ -2282,8 +2315,12 @@ option_clear(config_format_t *fmt, or_options_t *options, config_var_t *var)
     case CONFIG_TYPE_INTERVAL:
     case CONFIG_TYPE_MSEC_INTERVAL:
     case CONFIG_TYPE_UINT:
+    case CONFIG_TYPE_PORT:
     case CONFIG_TYPE_BOOL:
       *(int*)lvalue = 0;
+      break;
+    case CONFIG_TYPE_AUTOBOOL:
+      *(int*)lvalue = -1;
       break;
     case CONFIG_TYPE_MEMUNIT:
       *(uint64_t*)lvalue = 0;
@@ -2659,7 +2696,7 @@ options_init(or_options_t *options)
  * it is, or 0 if it isn't or the concept of a low port isn't applicable for
  * the platform we're on. */
 static int
-is_listening_on_low_port(uint16_t port_option,
+is_listening_on_low_port(int port_option,
                          const config_line_t *listen_options)
 {
 #ifdef MS_WINDOWS
@@ -2833,24 +2870,24 @@ static int
 compute_publishserverdescriptor(or_options_t *options)
 {
   smartlist_t *list = options->PublishServerDescriptor;
-  authority_type_t *auth = &options->_PublishServerDescriptor;
-  *auth = NO_AUTHORITY;
+  dirinfo_type_t *auth = &options->_PublishServerDescriptor;
+  *auth = NO_DIRINFO;
   if (!list) /* empty list, answer is none */
     return 0;
   SMARTLIST_FOREACH(list, const char *, string, {
     if (!strcasecmp(string, "v1"))
-      *auth |= V1_AUTHORITY;
+      *auth |= V1_DIRINFO;
     else if (!strcmp(string, "1"))
       if (options->BridgeRelay)
-        *auth |= BRIDGE_AUTHORITY;
+        *auth |= BRIDGE_DIRINFO;
       else
-        *auth |= V2_AUTHORITY | V3_AUTHORITY;
+        *auth |= V2_DIRINFO | V3_DIRINFO;
     else if (!strcasecmp(string, "v2"))
-      *auth |= V2_AUTHORITY;
+      *auth |= V2_DIRINFO;
     else if (!strcasecmp(string, "v3"))
-      *auth |= V3_AUTHORITY;
+      *auth |= V3_DIRINFO;
     else if (!strcasecmp(string, "bridge"))
-      *auth |= BRIDGE_AUTHORITY;
+      *auth |= BRIDGE_DIRINFO;
     else if (!strcasecmp(string, "hidserv"))
       log_warn(LD_CONFIG,
                "PublishServerDescriptor hidserv is invalid. See "
@@ -2907,9 +2944,6 @@ options_validate(or_options_t *old_options, or_options_t *options,
 
   tor_assert(msg);
   *msg = NULL;
-
-  if (options->ORPort < 0 || options->ORPort > 65535)
-    REJECT("ORPort option out of bounds.");
 
   if (server_mode(options) &&
       (!strcmpstart(uname, "Windows 95") ||
@@ -3014,28 +3048,10 @@ options_validate(or_options_t *old_options, or_options_t *options,
       REJECT("Failed to resolve/guess local address. See logs for details.");
   }
 
-  if (strcmp(options->RefuseUnknownExits, "0") &&
-      strcmp(options->RefuseUnknownExits, "1") &&
-      strcmp(options->RefuseUnknownExits, "auto")) {
-    REJECT("RefuseUnknownExits must be 0, 1, or auto");
-  }
-
 #ifndef MS_WINDOWS
   if (options->RunAsDaemon && torrc_fname && path_is_relative(torrc_fname))
     REJECT("Can't use a relative path to torrc when RunAsDaemon is set.");
 #endif
-
-  if (options->SocksPort < 0 || options->SocksPort > 65535)
-    REJECT("SocksPort option out of bounds.");
-
-  if (options->DNSPort < 0 || options->DNSPort > 65535)
-    REJECT("DNSPort option out of bounds.");
-
-  if (options->TransPort < 0 || options->TransPort > 65535)
-    REJECT("TransPort option out of bounds.");
-
-  if (options->NATDPort < 0 || options->NATDPort > 65535)
-    REJECT("NATDPort option out of bounds.");
 
   if (options->SocksPort == 0 && options->TransPort == 0 &&
       options->NATDPort == 0 && options->ORPort == 0 &&
@@ -3044,12 +3060,6 @@ options_validate(or_options_t *old_options, or_options_t *options,
         "SocksPort, TransPort, NATDPort, DNSPort, and ORPort are all "
         "undefined, and there aren't any hidden services configured.  "
         "Tor will still run, but probably won't do anything.");
-
-  if (options->ControlPort < 0 || options->ControlPort > 65535)
-    REJECT("ControlPort option out of bounds.");
-
-  if (options->DirPort < 0 || options->DirPort > 65535)
-    REJECT("DirPort option out of bounds.");
 
 #ifndef USE_TRANSPARENT
   if (options->TransPort || options->TransListenAddress)
@@ -3302,9 +3312,9 @@ options_validate(or_options_t *old_options, or_options_t *options,
   }
 
   if ((options->BridgeRelay
-        || options->_PublishServerDescriptor & BRIDGE_AUTHORITY)
+        || options->_PublishServerDescriptor & BRIDGE_DIRINFO)
       && (options->_PublishServerDescriptor
-          & (V1_AUTHORITY|V2_AUTHORITY|V3_AUTHORITY))) {
+          & (V1_DIRINFO|V2_DIRINFO|V3_DIRINFO))) {
     REJECT("Bridges are not supposed to publish router descriptors to the "
            "directory authorities. Please correct your "
            "PublishServerDescriptor line.");
@@ -4543,7 +4553,7 @@ parse_bridge_line(const char *line, int validate_only)
  * bits it's missing) as a valid authority. Return 0 on success,
  * or -1 if the line isn't well-formed or if we can't add it. */
 static int
-parse_dir_server_line(const char *line, authority_type_t required_type,
+parse_dir_server_line(const char *line, dirinfo_type_t required_type,
                       int validate_only)
 {
   smartlist_t *items = NULL;
@@ -4552,7 +4562,7 @@ parse_dir_server_line(const char *line, authority_type_t required_type,
   uint16_t dir_port = 0, or_port = 0;
   char digest[DIGEST_LEN];
   char v3_digest[DIGEST_LEN];
-  authority_type_t type = V2_AUTHORITY;
+  dirinfo_type_t type = V2_DIRINFO;
   int is_not_hidserv_authority = 0, is_not_v2_authority = 0;
 
   items = smartlist_create();
@@ -4573,13 +4583,13 @@ parse_dir_server_line(const char *line, authority_type_t required_type,
     if (TOR_ISDIGIT(flag[0]))
       break;
     if (!strcasecmp(flag, "v1")) {
-      type |= (V1_AUTHORITY | HIDSERV_AUTHORITY);
+      type |= (V1_DIRINFO | HIDSERV_DIRINFO);
     } else if (!strcasecmp(flag, "hs")) {
-      type |= HIDSERV_AUTHORITY;
+      type |= HIDSERV_DIRINFO;
     } else if (!strcasecmp(flag, "no-hs")) {
       is_not_hidserv_authority = 1;
     } else if (!strcasecmp(flag, "bridge")) {
-      type |= BRIDGE_AUTHORITY;
+      type |= BRIDGE_DIRINFO;
     } else if (!strcasecmp(flag, "no-v2")) {
       is_not_v2_authority = 1;
     } else if (!strcasecmpstart(flag, "orport=")) {
@@ -4596,7 +4606,7 @@ parse_dir_server_line(const char *line, authority_type_t required_type,
         log_warn(LD_CONFIG, "Bad v3 identity digest '%s' on DirServer line",
                  flag);
       } else {
-        type |= V3_AUTHORITY;
+        type |= V3_DIRINFO|EXTRAINFO_DIRINFO|MICRODESC_DIRINFO;
       }
     } else {
       log_warn(LD_CONFIG, "Unrecognized flag '%s' on DirServer line",
@@ -4606,9 +4616,9 @@ parse_dir_server_line(const char *line, authority_type_t required_type,
     smartlist_del_keeporder(items, 0);
   }
   if (is_not_hidserv_authority)
-    type &= ~HIDSERV_AUTHORITY;
+    type &= ~HIDSERV_DIRINFO;
   if (is_not_v2_authority)
-    type &= ~V2_AUTHORITY;
+    type &= ~V2_DIRINFO;
 
   if (smartlist_len(items) < 2) {
     log_warn(LD_CONFIG, "Too few arguments to DirServer line.");
@@ -4752,7 +4762,7 @@ write_configuration_file(const char *fname, or_options_t *options)
   switch (file_status(fname)) {
     case FN_FILE:
       old_val = read_file_to_str(fname, 0, NULL);
-      if (strcmpstart(old_val, GENERATED_FILE_PREFIX)) {
+      if (!old_val || strcmpstart(old_val, GENERATED_FILE_PREFIX)) {
         rename_old = 1;
       }
       tor_free(old_val);
@@ -5403,11 +5413,13 @@ getinfo_helper_config(control_connection_t *conn,
         case CONFIG_TYPE_STRING: type = "String"; break;
         case CONFIG_TYPE_FILENAME: type = "Filename"; break;
         case CONFIG_TYPE_UINT: type = "Integer"; break;
+        case CONFIG_TYPE_PORT: type = "Port"; break;
         case CONFIG_TYPE_INTERVAL: type = "TimeInterval"; break;
         case CONFIG_TYPE_MSEC_INTERVAL: type = "TimeMsecInterval"; break;
         case CONFIG_TYPE_MEMUNIT: type = "DataSize"; break;
         case CONFIG_TYPE_DOUBLE: type = "Float"; break;
         case CONFIG_TYPE_BOOL: type = "Boolean"; break;
+        case CONFIG_TYPE_AUTOBOOL: type = "Boolean+Auto"; break;
         case CONFIG_TYPE_ISOTIME: type = "Time"; break;
         case CONFIG_TYPE_ROUTERSET: type = "RouterList"; break;
         case CONFIG_TYPE_CSV: type = "CommaList"; break;

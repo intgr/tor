@@ -560,7 +560,9 @@ circuit_build_times_create_histogram(circuit_build_times_t *cbt,
  * Return the Pareto start-of-curve parameter Xm.
  *
  * Because we are not a true Pareto curve, we compute this as the
- * weighted average of the N=3 most frequent build time bins.
+ * weighted average of the N most frequent build time bins. N is either
+ * 1 if we don't have enough circuit build time data collected, or
+ * determined by the consensus parameter cbtnummodes (default 3).
  */
 static build_time_t
 circuit_build_times_get_xm(circuit_build_times_t *cbt)
@@ -573,6 +575,9 @@ circuit_build_times_get_xm(circuit_build_times_t *cbt)
   int n=0;
   int num_modes = circuit_build_times_default_num_xm_modes();
 
+  tor_assert(nbins > 0);
+  tor_assert(num_modes > 0);
+
   // Only use one mode if < 1000 buildtimes. Not enough data
   // for multiple.
   if (cbt->total_build_times < CBT_NCIRCUITS_TO_OBSERVE)
@@ -580,6 +585,7 @@ circuit_build_times_get_xm(circuit_build_times_t *cbt)
 
   nth_max_bin = (build_time_t*)tor_malloc_zero(num_modes*sizeof(build_time_t));
 
+  /* Determine the N most common build times */
   for (i = 0; i < nbins; i++) {
     if (histogram[i] >= histogram[nth_max_bin[0]]) {
       nth_max_bin[0] = i;
@@ -600,6 +606,10 @@ circuit_build_times_get_xm(circuit_build_times_t *cbt)
     log_info(LD_CIRC, "Xm mode #%d: %u %u", n, CBT_BIN_TO_MS(nth_max_bin[n]),
              histogram[nth_max_bin[n]]);
   }
+
+  /* The following assert is safe, because we don't get called when we
+   * haven't observed at least CBT_MIN_MIN_CIRCUITS_TO_OBSERVE circuits. */
+  tor_assert(bin_counts > 0);
 
   ret /= bin_counts;
   tor_free(histogram);
@@ -1808,7 +1818,7 @@ circuit_n_conn_done(or_connection_t *or_conn, int status)
           continue;
       } else {
         /* We expected a key. See if it's the right one. */
-        if (memcmp(or_conn->identity_digest,
+        if (tor_memneq(or_conn->identity_digest,
                    circ->n_hop->identity_digest, DIGEST_LEN))
           continue;
       }
@@ -2216,7 +2226,7 @@ circuit_extend(cell_t *cell, circuit_t *circ)
   /* Next, check if we're being asked to connect to the hop that the
    * extend cell came from. There isn't any reason for that, and it can
    * assist circular-path attacks. */
-  if (!memcmp(id_digest, TO_OR_CIRCUIT(circ)->p_conn->identity_digest,
+  if (tor_memeq(id_digest, TO_OR_CIRCUIT(circ)->p_conn->identity_digest,
               DIGEST_LEN)) {
     log_fn(LOG_PROTOCOL_WARN, LD_PROTOCOL,
            "Client asked me to extend back to the previous hop.");
@@ -3517,7 +3527,7 @@ static INLINE entry_guard_t *
 is_an_entry_guard(const char *digest)
 {
   SMARTLIST_FOREACH(entry_guards, entry_guard_t *, entry,
-                    if (!memcmp(digest, entry->identity, DIGEST_LEN))
+                    if (tor_memeq(digest, entry->identity, DIGEST_LEN))
                       return entry;
                    );
   return NULL;
@@ -3850,7 +3860,7 @@ entry_guard_register_connect_status(const char *digest, int succeeded,
 
   SMARTLIST_FOREACH(entry_guards, entry_guard_t *, e,
     {
-      if (!memcmp(e->identity, digest, DIGEST_LEN)) {
+      if (tor_memeq(e->identity, digest, DIGEST_LEN)) {
         entry = e;
         idx = e_sl_idx;
         break;
@@ -4514,7 +4524,7 @@ get_configured_bridge_by_addr_port_digest(tor_addr_t *addr, uint16_t port,
           !tor_addr_compare(&bridge->addr, addr, CMP_EXACT) &&
           bridge->port == port)
         return bridge;
-      if (!memcmp(bridge->identity, digest, DIGEST_LEN))
+      if (tor_memeq(bridge->identity, digest, DIGEST_LEN))
         return bridge;
     }
   SMARTLIST_FOREACH_END(bridge);
@@ -4595,7 +4605,7 @@ find_bridge_by_digest(const char *digest)
 {
   SMARTLIST_FOREACH(bridge_list, bridge_info_t *, bridge,
     {
-      if (!memcmp(bridge->identity, digest, DIGEST_LEN))
+      if (tor_memeq(bridge->identity, digest, DIGEST_LEN))
         return bridge;
     });
   return NULL;
@@ -4649,7 +4659,7 @@ retry_bridge_descriptor_fetch_directly(const char *digest)
 void
 fetch_bridge_descriptors(or_options_t *options, time_t now)
 {
-  int num_bridge_auths = get_n_authorities(BRIDGE_AUTHORITY);
+  int num_bridge_auths = get_n_authorities(BRIDGE_DIRINFO);
   int ask_bridge_directly;
   int can_use_bridge_authority;
 

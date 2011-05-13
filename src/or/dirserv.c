@@ -1552,11 +1552,11 @@ dirserv_pick_cached_dir_obj(cached_dir_t *cache_src,
                             cached_dir_t *auth_src,
                             time_t dirty, cached_dir_t *(*regenerate)(void),
                             const char *name,
-                            authority_type_t auth_type)
+                            dirinfo_type_t auth_type)
 {
   or_options_t *options = get_options();
-  int authority = (auth_type == V1_AUTHORITY && authdir_mode_v1(options)) ||
-                  (auth_type == V2_AUTHORITY && authdir_mode_v2(options));
+  int authority = (auth_type == V1_DIRINFO && authdir_mode_v1(options)) ||
+                  (auth_type == V2_DIRINFO && authdir_mode_v2(options));
 
   if (!authority || authdir_mode_bridge(options)) {
     return cache_src;
@@ -1585,7 +1585,7 @@ dirserv_get_directory(void)
   return dirserv_pick_cached_dir_obj(cached_directory, the_directory,
                                      the_directory_is_dirty,
                                      dirserv_regenerate_directory,
-                                     "v1 server directory", V1_AUTHORITY);
+                                     "v1 server directory", V1_DIRINFO);
 }
 
 /** Only called by v1 auth dirservers.
@@ -1678,7 +1678,7 @@ dirserv_get_runningrouters(void)
                          &cached_runningrouters, &the_runningrouters,
                          runningrouters_is_dirty,
                          generate_runningrouters,
-                         "v1 network status list", V1_AUTHORITY);
+                         "v1 network status list", V1_DIRINFO);
 }
 
 /** Return the latest downloaded consensus networkstatus in encoded, signed,
@@ -2116,7 +2116,7 @@ routerstatus_format_entry(char *buf, size_t buf_len,
       /* This assert can fire for the control port, because
        * it can request NS documents before all descriptors
        * have been fetched. */
-      if (memcmp(desc->cache_info.signed_descriptor_digest,
+      if (tor_memneq(desc->cache_info.signed_descriptor_digest,
             rs->descriptor_digest,
             DIGEST_LEN)) {
         char rl_d[HEX_DIGEST_LEN+1];
@@ -2132,7 +2132,7 @@ routerstatus_format_entry(char *buf, size_t buf_len,
             "(router %s)\n",
             rl_d, rs_d, id);
 
-        tor_assert(!memcmp(desc->cache_info.signed_descriptor_digest,
+        tor_assert(tor_memeq(desc->cache_info.signed_descriptor_digest,
               rs->descriptor_digest,
               DIGEST_LEN));
       };
@@ -2234,9 +2234,9 @@ _compare_routerinfo_by_ip_and_bw(const void **a, const void **b)
 
   /* They're equal! Compare by identity digest, so there's a
    * deterministic order and we avoid flapping. */
-  return memcmp(first->cache_info.identity_digest,
-                second->cache_info.identity_digest,
-                DIGEST_LEN);
+  return fast_memcmp(first->cache_info.identity_digest,
+                     second->cache_info.identity_digest,
+                     DIGEST_LEN);
 }
 
 /** Given a list of routerinfo_t in <b>routers</b>, return a new digestmap_t
@@ -2726,8 +2726,8 @@ dirserv_generate_networkstatus_vote_obj(crypto_pk_env_t *private_key,
   voter->sigs = smartlist_create();
   voter->address = hostname;
   voter->addr = addr;
-  voter->dir_port = options->DirPort;
-  voter->or_port = options->ORPort;
+  voter->dir_port = router_get_advertised_dir_port(options);
+  voter->or_port = router_get_advertised_or_port(options);
   voter->contact = tor_strdup(contact);
   if (options->V3AuthUseLegacyKey) {
     authority_cert_t *c = get_my_v3_legacy_cert();
@@ -2829,7 +2829,8 @@ generate_v2_networkstatus_opinion(void)
                "dir-options%s%s%s%s\n"
                "%s" /* client version line, server version line. */
                "dir-signing-key\n%s",
-               hostname, fmt_addr32(addr), (int)options->DirPort,
+               hostname, fmt_addr32(addr),
+               (int)router_get_advertised_dir_port(options),
                fingerprint,
                contact,
                published,
@@ -2967,7 +2968,7 @@ dirserv_get_networkstatus_v2_fingerprints(smartlist_t *result,
     } else {
       SMARTLIST_FOREACH(router_get_trusted_dir_servers(),
                   trusted_dir_server_t *, ds,
-                  if (ds->type & V2_AUTHORITY)
+                  if (ds->type & V2_DIRINFO)
                     smartlist_add(result, tor_memdup(ds->digest, DIGEST_LEN)));
     }
     smartlist_sort_digests(result);
@@ -3185,7 +3186,7 @@ dirserv_orconn_tls_done(const char *address,
   SMARTLIST_FOREACH_BEGIN(rl->routers, routerinfo_t *, ri) {
     if (!strcasecmp(address, ri->address) && or_port == ri->or_port &&
         as_advertised &&
-        !memcmp(ri->cache_info.identity_digest, digest_rcvd, DIGEST_LEN)) {
+        fast_memeq(ri->cache_info.identity_digest, digest_rcvd, DIGEST_LEN)) {
       /* correct digest. mark this router reachable! */
       if (!bridge_auth || ri->purpose == ROUTER_PURPOSE_BRIDGE) {
         tor_addr_t addr, *addrp=NULL;

@@ -158,7 +158,7 @@ rend_client_send_introduction(origin_circuit_t *introcirc,
   intro_key = NULL;
   SMARTLIST_FOREACH(entry->parsed->intro_nodes, rend_intro_point_t *,
                     intro, {
-    if (!memcmp(introcirc->build_state->chosen_exit->identity_digest,
+    if (tor_memeq(introcirc->build_state->chosen_exit->identity_digest,
                 intro->extend_info->identity_digest, DIGEST_LEN)) {
       intro_key = intro->intro_key;
       break;
@@ -278,7 +278,7 @@ rend_client_send_introduction(origin_circuit_t *introcirc,
   introcirc->_base.purpose = CIRCUIT_PURPOSE_C_INTRODUCE_ACK_WAIT;
 
   return 0;
-perm_err:
+ perm_err:
   if (!introcirc->_base.marked_for_close)
     circuit_mark_for_close(TO_CIRCUIT(introcirc), END_CIRC_REASON_INTERNAL);
   circuit_mark_for_close(TO_CIRCUIT(rendcirc), END_CIRC_REASON_INTERNAL);
@@ -629,7 +629,7 @@ rend_client_remove_intro_point(extend_info_t *failed_intro,
 
   for (i = 0; i < smartlist_len(ent->parsed->intro_nodes); i++) {
     rend_intro_point_t *intro = smartlist_get(ent->parsed->intro_nodes, i);
-    if (!memcmp(failed_intro->identity_digest,
+    if (tor_memeq(failed_intro->identity_digest,
                 intro->extend_info->identity_digest, DIGEST_LEN)) {
       rend_intro_point_free(intro);
       smartlist_del(ent->parsed->intro_nodes, i);
@@ -728,7 +728,7 @@ rend_client_receive_rendezvous(origin_circuit_t *circ, const uint8_t *request,
     goto err;
 
   /* Check whether the digest is right... */
-  if (memcmp(keys, request+DH_KEY_LEN, DIGEST_LEN)) {
+  if (tor_memneq(keys, request+DH_KEY_LEN, DIGEST_LEN)) {
     log_warn(LD_PROTOCOL, "Incorrect digest of key material.");
     goto err;
   }
