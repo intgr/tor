@@ -214,6 +214,7 @@ static config_var_t _option_vars[] = {
   V(ControlPortFileGroupReadable,BOOL,     "0"),
   V(ControlPortWriteToFile,      FILENAME, NULL),
   V(ControlSocket,               LINELIST, NULL),
+  V(ControlSocketsGroupWritable,    BOOL,     "0"),
   V(CookieAuthentication,        BOOL,     "0"),
   V(CookieAuthFileGroupReadable, BOOL,     "0"),
   V(CookieAuthFile,              STRING,   NULL),
@@ -974,9 +975,15 @@ options_act_reversible(or_options_t *old_options, char **msg)
   }
 
 #ifndef HAVE_SYS_UN_H
-  if (options->ControlSocket) {
-    *msg = tor_strdup("Unix domain sockets (ControlSocket) not supported"
-                      " on this OS/with this build.");
+  if (options->ControlSocket || options->ControlSocketsGroupWritable) {
+    *msg = tor_strdup("Unix domain sockets (ControlSocket) not supported "
+                      "on this OS/with this build.");
+    goto rollback;
+  }
+#else
+  if (options->ControlSocketsGroupWritable && !options->ControlSocket) {
+    *msg = tor_strdup("Setting ControlSocketGroupWritable without setting"
+                      "a ControlSocket makes no sense.");
     goto rollback;
   }
 #endif
@@ -1194,7 +1201,7 @@ options_act(or_options_t *old_options)
     return -1;
 
   if (options->Bridges) {
-    clear_bridge_list();
+    mark_bridge_list();
     for (cl = options->Bridges; cl; cl = cl->next) {
       if (parse_bridge_line(cl->value, 0)<0) {
         log_warn(LD_BUG,
@@ -1202,6 +1209,7 @@ options_act(or_options_t *old_options)
         return -1;
       }
     }
+    sweep_bridge_list();
   }
 
   if (running_tor && rend_config_services(options, 0)<0) {
@@ -1285,7 +1293,12 @@ options_act(or_options_t *old_options)
 
   /* Check for transitions that need action. */
   if (old_options) {
+    int revise_trackexithosts = 0;
+    int revise_automap_entries = 0;
     if ((options->UseEntryGuards && !old_options->UseEntryGuards) ||
+        options->UseBridges != old_options->UseBridges ||
+        (options->UseBridges &&
+         !config_lines_eq(options->Bridges, old_options->Bridges)) ||
         !routerset_equal(old_options->ExcludeNodes,options->ExcludeNodes) ||
         !routerset_equal(old_options->ExcludeExitNodes,
                          options->ExcludeExitNodes) ||
@@ -1293,12 +1306,35 @@ options_act(or_options_t *old_options)
         !routerset_equal(old_options->ExitNodes, options->ExitNodes) ||
         options->StrictNodes != old_options->StrictNodes) {
       log_info(LD_CIRC,
-               "Changed to using entry guards, or changed preferred or "
-               "excluded node lists. Abandoning previous circuits.");
+               "Changed to using entry guards or bridges, or changed "
+               "preferred or excluded node lists. "
+               "Abandoning previous circuits.");
       circuit_mark_all_unused_circs();
       circuit_expire_all_dirty_circs();
-      addressmap_clear_excluded_trackexithosts(options);
+      revise_trackexithosts = 1;
     }
+
+    if (!smartlist_strings_eq(old_options->TrackHostExits,
+                              options->TrackHostExits))
+      revise_trackexithosts = 1;
+
+    if (revise_trackexithosts)
+      addressmap_clear_excluded_trackexithosts(options);
+
+    if (!options->AutomapHostsOnResolve) {
+      if (old_options->AutomapHostsOnResolve)
+        revise_automap_entries = 1;
+    } else {
+      if (!smartlist_strings_eq(old_options->AutomapHostsSuffixes,
+                                options->AutomapHostsSuffixes))
+        revise_automap_entries = 1;
+      else if (!opt_streq(old_options->VirtualAddrNetwork,
+                          options->VirtualAddrNetwork))
+        revise_automap_entries = 1;
+    }
+
+    if (revise_automap_entries)
+      addressmap_clear_invalid_automaps(options);
 
 /* How long should we delay counting bridge stats after becoming a bridge?
  * We use this so we don't count people who used our bridge thinking it is
@@ -1457,7 +1493,7 @@ options_act(or_options_t *old_options)
    */
   if (!old_options ||
       options_transition_affects_descriptor(old_options, options))
-    mark_my_descriptor_dirty();
+    mark_my_descriptor_dirty("config change");
 
   /* We may need to reschedule some directory stuff if our status changed. */
   if (old_options) {
@@ -3449,8 +3485,8 @@ options_validate(or_options_t *old_options, or_options_t *options,
   }
 
   if (options->HTTPProxyAuthenticator) {
-    if (strlen(options->HTTPProxyAuthenticator) >= 48)
-      REJECT("HTTPProxyAuthenticator is too long (>= 48 chars).");
+    if (strlen(options->HTTPProxyAuthenticator) >= 512)
+      REJECT("HTTPProxyAuthenticator is too long (>= 512 chars).");
   }
 
   if (options->HTTPSProxy) { /* parse it now */
@@ -3463,8 +3499,8 @@ options_validate(or_options_t *old_options, or_options_t *options,
   }
 
   if (options->HTTPSProxyAuthenticator) {
-    if (strlen(options->HTTPSProxyAuthenticator) >= 48)
-      REJECT("HTTPSProxyAuthenticator is too long (>= 48 chars).");
+    if (strlen(options->HTTPSProxyAuthenticator) >= 512)
+      REJECT("HTTPSProxyAuthenticator is too long (>= 512 chars).");
   }
 
   if (options->Socks4Proxy) { /* parse it now */
@@ -3860,7 +3896,7 @@ options_transition_affects_workers(or_options_t *old_options,
       old_options->ORPort != new_options->ORPort ||
       old_options->ServerDNSSearchDomains !=
                                        new_options->ServerDNSSearchDomains ||
-      old_options->SafeLogging != new_options->SafeLogging ||
+      old_options->_SafeLogging != new_options->_SafeLogging ||
       old_options->ClientOnly != new_options->ClientOnly ||
       public_server_mode(old_options) != public_server_mode(new_options) ||
       !config_lines_eq(old_options->Logs, new_options->Logs) ||

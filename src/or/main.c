@@ -1110,8 +1110,6 @@ run_scheduled_events(time_t now)
   if (time_to_try_getting_descriptors < now) {
     update_all_descriptor_downloads(now);
     update_extrainfo_downloads(now);
-    if (options->UseBridges)
-      fetch_bridge_descriptors(options, now);
     if (router_have_minimum_dir_info())
       time_to_try_getting_descriptors = now + LAZY_DESCRIPTOR_RETRY_INTERVAL;
     else
@@ -1123,6 +1121,9 @@ run_scheduled_events(time_t now)
     time_to_reset_descriptor_failures =
       now + DESCRIPTOR_FAILURE_RESET_INTERVAL;
   }
+
+  if (options->UseBridges)
+    fetch_bridge_descriptors(options, now);
 
   /** 1b. Every MAX_SSL_KEY_LIFETIME seconds, we change our TLS context. */
   if (!last_rotated_x509_certificate)
@@ -1602,7 +1603,7 @@ ip_address_changed(int at_interface)
         reset_bandwidth_test();
       stats_n_seconds_working = 0;
       router_reset_reachability();
-      mark_my_descriptor_dirty();
+      mark_my_descriptor_dirty("IP address changed");
     }
   }
 
@@ -1639,7 +1640,6 @@ do_hup(void)
 
   router_reset_warnings();
   routerlist_reset_warnings();
-  addressmap_clear_transient();
   /* first, reload config variables, in case they've changed */
   if (options->ReloadTorrcOnSIGHUP) {
     /* no need to provide argc/v, they've been cached in init_from_config */

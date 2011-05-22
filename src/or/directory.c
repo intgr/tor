@@ -289,6 +289,8 @@ directory_post_to_dirservers(uint8_t dir_purpose, uint8_t router_purpose,
   int post_via_tor;
   smartlist_t *dirservers = router_get_trusted_dir_servers();
   int found = 0;
+  const int exclude_self = (dir_purpose == DIR_PURPOSE_UPLOAD_VOTE ||
+                            dir_purpose == DIR_PURPOSE_UPLOAD_SIGNATURES);
   tor_assert(dirservers);
   /* This tries dirservers which we believe to be down, but ultimately, that's
    * harmless, and we may as well err on the side of getting things uploaded.
@@ -299,6 +301,9 @@ directory_post_to_dirservers(uint8_t dir_purpose, uint8_t router_purpose,
       tor_addr_t ds_addr;
 
       if ((type & ds->type) == 0)
+        continue;
+
+      if (exclude_self && router_digest_is_me(ds->digest))
         continue;
 
       if (options->ExcludeNodes && options->StrictNodes &&
@@ -2103,7 +2108,8 @@ connection_dir_client_reached_eof(dir_connection_t *conn)
              (int)body_len, status_code, escaped(reason));
     switch (status_code) {
       case 200:
-        if (rend_cache_store(body, body_len, 0) < -1) {
+        if (rend_cache_store(body, body_len, 0,
+                             conn->rend_data->onion_address) < -1) {
           log_warn(LD_REND,"Failed to parse rendezvous descriptor.");
           /* Any pending rendezvous attempts will notice when
            * connection_about_to_close_connection()
@@ -3371,7 +3377,7 @@ directory_handle_command_post(dir_connection_t *conn, const char *headers,
       !strcmpstart(url,"/tor/rendezvous/publish")) {
     /* rendezvous descriptor post */
     log_info(LD_REND, "Handling rendezvous descriptor post.");
-    if (rend_cache_store(body, body_len, 1) < 0) {
+    if (rend_cache_store(body, body_len, 1, NULL) < 0) {
       log_fn(LOG_PROTOCOL_WARN, LD_DIRSERV,
              "Rejected rend descriptor (length %d) from %s.",
              (int)body_len, conn->_base.address);
