@@ -1208,7 +1208,8 @@ router_parse_list_from_string(const char **s, const char *eos,
                                               prepend_annotations);
       if (router) {
         log_debug(LD_DIR, "Read router '%s', purpose '%s'",
-                  router->nickname, router_purpose_to_string(router->purpose));
+                  router_describe(router),
+                  router_purpose_to_string(router->purpose));
         signed_desc = &router->cache_info;
         elt = router;
       }
@@ -2502,7 +2503,7 @@ networkstatus_verify_bw_weights(networkstatus_t *ns)
       }
     } else {
       log_warn(LD_BUG, "Missing consensus bandwidth for router %s",
-          rs->nickname);
+               routerstatus_describe(rs));
     }
   } SMARTLIST_FOREACH_END(rs);
 
@@ -3773,9 +3774,9 @@ token_check_object(memarea_t *area, const char *kwd,
       break;
     case NEED_KEY_1024: /* There must be a 1024-bit public key. */
     case NEED_SKEY_1024: /* There must be a 1024-bit private key. */
-      if (tok->key && crypto_pk_keysize(tok->key) != PK_BYTES) {
+      if (tok->key && crypto_pk_num_bits(tok->key) != PK_BYTES*8) {
         tor_snprintf(ebuf, sizeof(ebuf), "Wrong size on key for %s: %d bits",
-                     kwd, (int)crypto_pk_keysize(tok->key));
+                     kwd, crypto_pk_num_bits(tok->key));
         RET_ERR(ebuf);
       }
       /* fall through */
