@@ -1094,6 +1094,16 @@ tor_accept_socket(tor_socket_t sockfd, struct sockaddr *addr, socklen_t *len)
   return s;
 }
 
+/** Register socket from an external source, not created via socket() or
+ * accept()
+ */
+void
+tor_adopt_socket(tor_socket_t sockfd)
+{
+  assert(SOCKET_OK(sockfd));
+  ++n_sockets_open;
+}
+
 /** Return the number of sockets we currently have opened. */
 int
 get_n_open_sockets(void)

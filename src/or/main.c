@@ -2365,10 +2365,17 @@ tor_init(int argc, char *argv[])
   }
   atexit(exit_function);
 
+  systemd_discover_sockets();
+
   if (options_init_from_torrc(argc,argv) < 0) {
+    /* Prints additional warnings for non-matching sockets */
+    systemd_finish_sockets();
+
     log_err(LD_CONFIG,"Reading config failed--see warnings above.");
     return -1;
   }
+
+  systemd_finish_sockets();
 
 #ifndef _WIN32
   if (geteuid()==0)

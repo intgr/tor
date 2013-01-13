@@ -9,6 +9,7 @@
  * \brief General high-level functions to handle reading and writing
  * on connections.
  **/
+#include <systemd/sd-daemon.h>
 
 #include "or.h"
 #include "buffers.h"
@@ -95,6 +96,8 @@ static tor_addr_t *last_interface_ipv6 = NULL;
 /** A list of tor_addr_t for addresses we've used in outgoing connections.
  * Used to detect IP address changes. */
 static smartlist_t *outgoing_addrs = NULL;
+/** Sockets (file descriptors) passed to us from parent process. */
+static smartlist_t *pending_sockets = NULL;
 
 #define CASE_ANY_LISTENER_TYPE \
     case CONN_TYPE_OR_LISTENER: \
@@ -927,6 +930,74 @@ make_socket_reuseable(tor_socket_t sock)
 #endif
 }
 
+/** Discover sockets passed in from systemd (when started via socket activation)
+ *
+ * systemd passes us sockets in arbitrary order. Here we just dump them to a
+ * list. Later on, after loading the configuration, we try to match up these
+ * sockets to configured ports.
+ */
+int
+systemd_discover_sockets(void)
+{
+  int fd;
+  int n_sock = sd_listen_fds(1);
+
+  log_warn(LD_NET, "Got %d sockets from systemd", n_sock);
+
+  pending_sockets = smartlist_new();
+
+  for(fd = SD_LISTEN_FDS_START; fd < (SD_LISTEN_FDS_START + n_sock); fd++)
+  {
+    tor_adopt_socket(fd);
+    smartlist_add(pending_sockets, fd);
+  }
+
+  return 0;
+}
+
+/** Close sockets passed in from systemd that didn't match any configured
+ * ports and log warnings.
+ */
+int
+systemd_finish_sockets(void)
+{
+  int n = 0;
+
+  SMARTLIST_FOREACH_BEGIN(pending_sockets, int, fd) {
+    tor_close_socket(fd);
+    n++;
+    SMARTLIST_DEL_CURRENT(pending_sockets, fd);
+  }
+  SMARTLIST_FOREACH_END(fd);
+
+  if(n)
+  {
+    log_warn(LD_NET, "Closing %d unmatched sockets passed in from systemd. "
+             "Your Tor configuration does not match systemd.", n);
+  }
+
+  return 0;
+}
+
+/** Find the socket with a given port number from the sockets passed by
+ * systemd. Returns file descriptor when found, -1 when not found.
+ */
+static int
+find_pending_socket(int domain, int type, int protocol, uint16_t port)
+{
+  log_warn(LD_NET, "Finding systemd port %u", (unsigned)port);
+
+  SMARTLIST_FOREACH_BEGIN(pending_sockets, int, fd) {
+    if (sd_is_socket_inet(fd, 0, type, 1, port)) {
+      SMARTLIST_DEL_CURRENT(pending_sockets, fd);
+      log_warn(LD_NET, "Found fd %d", fd);
+      return fd;
+    }
+  }
+  SMARTLIST_FOREACH_END(fd);
+  return -1;
+}
+
 /** Bind a new non-blocking socket listening to the socket described
  * by <b>listensockaddr</b>.
  *
@@ -959,21 +1030,31 @@ connection_listener_new(const struct sockaddr *listensockaddr,
   if (listensockaddr->sa_family == AF_INET ||
       listensockaddr->sa_family == AF_INET6) {
     int is_tcp = (type != CONN_TYPE_AP_DNS_LISTENER);
+    int is_bound = 0;
+    int socktype = is_tcp ? SOCK_STREAM : SOCK_DGRAM;
+    int protocol = is_tcp ? IPPROTO_TCP: IPPROTO_UDP;
     if (is_tcp)
       start_reading = 1;
 
     tor_addr_from_sockaddr(&addr, listensockaddr, &usePort);
 
-    log_notice(LD_NET, "Opening %s on %s",
-               conn_type_to_string(type), fmt_addrport(&addr, usePort));
+    /* XXX listen address matching is not currently done */
+    s = find_pending_socket(tor_addr_family(&addr), socktype, protocol, usePort);
+    if (SOCKET_OK(s))
+    {
+      is_bound = 1;
+    }
+    else
+    {
+      log_notice(LD_NET, "Opening %s on %s",
+                 conn_type_to_string(type), fmt_addrport(&addr, usePort));
 
-    s = tor_open_socket(tor_addr_family(&addr),
-                        is_tcp ? SOCK_STREAM : SOCK_DGRAM,
-                        is_tcp ? IPPROTO_TCP: IPPROTO_UDP);
-    if (!SOCKET_OK(s)) {
-      log_warn(LD_NET,"Socket creation failed: %s",
-               tor_socket_strerror(tor_socket_errno(-1)));
-      goto err;
+      s = tor_open_socket(tor_addr_family(&addr), socktype, protocol);
+      if (!SOCKET_OK(s)) {
+        log_warn(LD_NET,"Socket creation failed: %s",
+                 tor_socket_strerror(tor_socket_errno(-1)));
+        goto err;
+      }
     }
 
     make_socket_reuseable(s);
@@ -998,23 +1079,26 @@ connection_listener_new(const struct sockaddr *listensockaddr,
     }
 #endif
 
-    if (bind(s,listensockaddr,socklen) < 0) {
-      const char *helpfulhint = "";
-      int e = tor_socket_errno(s);
-      if (ERRNO_IS_EADDRINUSE(e))
-        helpfulhint = ". Is Tor already running?";
-      log_warn(LD_NET, "Could not bind to %s:%u: %s%s", address, usePort,
-               tor_socket_strerror(e), helpfulhint);
-      tor_close_socket(s);
-      goto err;
-    }
-
-    if (is_tcp) {
-      if (listen(s,SOMAXCONN) < 0) {
-        log_warn(LD_NET, "Could not listen on %s:%u: %s", address, usePort,
-                 tor_socket_strerror(tor_socket_errno(s)));
+    if (!is_bound)
+    {
+      if (bind(s,listensockaddr,socklen) < 0) {
+        const char *helpfulhint = "";
+        int e = tor_socket_errno(s);
+        if (ERRNO_IS_EADDRINUSE(e))
+          helpfulhint = ". Is Tor already running?";
+        log_warn(LD_NET, "Could not bind to %s:%u: %s%s", address, usePort,
+                 tor_socket_strerror(e), helpfulhint);
         tor_close_socket(s);
         goto err;
+      }
+
+      if (is_tcp) {
+        if (listen(s,SOMAXCONN) < 0) {
+          log_warn(LD_NET, "Could not listen on %s:%u: %s", address, usePort,
+                   tor_socket_strerror(tor_socket_errno(s)));
+          tor_close_socket(s);
+          goto err;
+        }
       }
     }
 

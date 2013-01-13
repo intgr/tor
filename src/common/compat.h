@@ -447,6 +447,7 @@ int tor_close_socket(tor_socket_t s);
 tor_socket_t tor_open_socket(int domain, int type, int protocol);
 tor_socket_t tor_accept_socket(tor_socket_t sockfd, struct sockaddr *addr,
                                   socklen_t *len);
+void tor_adopt_socket(tor_socket_t sockfd);
 int get_n_open_sockets(void);
 
 #define tor_socket_send(s, buf, len, flags) send(s, buf, len, flags)
