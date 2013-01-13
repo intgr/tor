@@ -15,6 +15,18 @@
 /* XXXX For buf_datalen in inline function */
 #include "buffers.h"
 
+/** Temporary container object for pending sockets passed in from parent
+ * process.
+ */
+typedef struct pending_socket_t {
+  tor_socket_t fd;
+  int type; /* SOCK_STREAM, SOCK_DGRAM */
+  tor_addr_t addr;
+  uint16_t port;
+
+} pending_socket_t;
+
+
 const char *conn_type_to_string(int type);
 const char *conn_state_to_string(int type, int state);
 
@@ -25,6 +37,7 @@ entry_connection_t *entry_connection_new(int type, int socket_family);
 control_connection_t *control_connection_new(int socket_family);
 listener_connection_t *listener_connection_new(int type, int socket_family);
 connection_t *connection_new(int type, int socket_family);
+pending_socket_t *pending_socket_new(tor_socket_t fd);
 
 void connection_link_connections(connection_t *conn_a, connection_t *conn_b);
 void connection_free(connection_t *conn);
