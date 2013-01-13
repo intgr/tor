@@ -363,6 +363,14 @@ connection_new(int type, int socket_family)
   }
 }
 
+pending_socket_t *
+pending_socket_new(tor_socket_t sockfd)
+{
+  pending_socket_t *sock = tor_malloc_zero(sizeof(pending_socket_t));
+  sock->fd = sockfd;
+  return sock;
+}
+
 /** Initializes conn. (you must call connection_add() to link it into the main
  * array).
  *
@@ -939,8 +947,15 @@ make_socket_reuseable(tor_socket_t sock)
 int
 systemd_discover_sockets(void)
 {
-  int fd;
+  tor_socket_t fd;
   int n_sock = sd_listen_fds(1);
+  pending_socket_t *sock;
+  socklen_t len;
+  int type = 0;
+  int listening = 0;
+  struct stat sockstat;
+  struct sockaddr_storage addrbuf;
+  struct sockaddr *saddr = (struct sockaddr*)&addrbuf;
 
   log_warn(LD_NET, "Got %d sockets from systemd", n_sock);
 
@@ -949,7 +964,47 @@ systemd_discover_sockets(void)
   for(fd = SD_LISTEN_FDS_START; fd < (SD_LISTEN_FDS_START + n_sock); fd++)
   {
     tor_adopt_socket(fd);
-    smartlist_add(pending_sockets, fd);
+
+    /* Make sure it's a socket at all */
+    if (fstat(fd, &sockstat) < 0)
+      goto err;
+    if (!S_ISSOCK(sockstat.st_mode))
+      goto err;
+
+    /* Figure out socket type (SOCK_STREAM/SOCK_DGRAM) */
+    len = sizeof(type);
+    if (getsockopt(fd, SOL_SOCKET, SO_TYPE, &type, &len) < 0)
+      goto err;
+    if (len != sizeof(type))
+      goto err;
+
+    /* Make sure it's a listening socket */
+    len = sizeof(listening);
+    if (getsockopt(fd, SOL_SOCKET, SO_ACCEPTCONN, &listening, &len) < 0)
+      goto err;
+    if (len != sizeof(listening) || listening != 1)
+      goto err;
+
+    /* Get the bind address and port */
+    len = sizeof(addrbuf);
+    memset(&addrbuf, 0, sizeof(addrbuf));
+
+    if (getsockname(fd, (struct sockaddr*)&addrbuf, &len) < 0)
+      goto err;
+    if (len < sizeof(sa_family_t))
+      goto err;
+
+    /* All OK, add to pending list */
+    sock = pending_socket_new(fd);
+    sock->type = type;
+    tor_addr_from_sockaddr(&sock->addr, saddr, &sock->port);
+
+    smartlist_add(pending_sockets, sock);
+    continue;
+
+err:
+    log_err(LD_NET, "Error adopting systemd socket %d, closing", fd);
+    tor_close_socket(fd);
   }
 
   return 0;
@@ -961,20 +1016,15 @@ systemd_discover_sockets(void)
 int
 systemd_finish_sockets(void)
 {
-  int n = 0;
+  SMARTLIST_FOREACH_BEGIN(pending_sockets, pending_socket_t *, sock) {
+    log_warn(LD_NET, "Closing unmatched socket %s. "
+             "Your Tor configuration does not match the systemd unit.",
+             fmt_addrport(&sock->addr, sock->port));
 
-  SMARTLIST_FOREACH_BEGIN(pending_sockets, int, fd) {
-    tor_close_socket(fd);
-    n++;
-    SMARTLIST_DEL_CURRENT(pending_sockets, fd);
+    tor_close_socket(sock->fd);
+    SMARTLIST_DEL_CURRENT(pending_sockets, sock);
   }
-  SMARTLIST_FOREACH_END(fd);
-
-  if(n)
-  {
-    log_warn(LD_NET, "Closing %d unmatched sockets passed in from systemd. "
-             "Your Tor configuration does not match systemd.", n);
-  }
+  SMARTLIST_FOREACH_END(sock);
 
   return 0;
 }
@@ -982,19 +1032,27 @@ systemd_finish_sockets(void)
 /** Find the socket with a given port number from the sockets passed by
  * systemd. Returns file descriptor when found, -1 when not found.
  */
-static int
-find_pending_socket(int domain, int type, int protocol, uint16_t port)
+static tor_socket_t
+find_pending_socket(int conntype, int socktype, tor_addr_t *listen_addr, uint16_t port)
 {
+  tor_socket_t fd;
   log_warn(LD_NET, "Finding systemd port %u", (unsigned)port);
 
-  SMARTLIST_FOREACH_BEGIN(pending_sockets, int, fd) {
-    if (sd_is_socket_inet(fd, 0, type, 1, port)) {
-      SMARTLIST_DEL_CURRENT(pending_sockets, fd);
-      log_warn(LD_NET, "Found fd %d", fd);
+  SMARTLIST_FOREACH_BEGIN(pending_sockets, pending_socket_t *, sock) {
+    if(sock->type != socktype || sock->port != port)
+      continue;
+
+    if(tor_addr_compare(listen_addr, &sock->addr, CMP_SEMANTIC) == 0) {
+      SMARTLIST_DEL_CURRENT(pending_sockets, sock);
+      log_warn(LD_NET, "Found systemd socket for %s: %s",
+               conn_type_to_string(conntype),
+               fmt_addrport(&sock->addr, sock->port));
+      fd = sock->fd;
+      tor_free(sock);
       return fd;
     }
   }
-  SMARTLIST_FOREACH_END(fd);
+  SMARTLIST_FOREACH_END(sock);
   return -1;
 }
 
@@ -1032,14 +1090,12 @@ connection_listener_new(const struct sockaddr *listensockaddr,
     int is_tcp = (type != CONN_TYPE_AP_DNS_LISTENER);
     int is_bound = 0;
     int socktype = is_tcp ? SOCK_STREAM : SOCK_DGRAM;
-    int protocol = is_tcp ? IPPROTO_TCP: IPPROTO_UDP;
     if (is_tcp)
       start_reading = 1;
 
     tor_addr_from_sockaddr(&addr, listensockaddr, &usePort);
 
-    /* XXX listen address matching is not currently done */
-    s = find_pending_socket(tor_addr_family(&addr), socktype, protocol, usePort);
+    s = find_pending_socket(type, socktype, &addr, usePort);
     if (SOCKET_OK(s))
     {
       is_bound = 1;
@@ -1049,7 +1105,7 @@ connection_listener_new(const struct sockaddr *listensockaddr,
       log_notice(LD_NET, "Opening %s on %s",
                  conn_type_to_string(type), fmt_addrport(&addr, usePort));
 
-      s = tor_open_socket(tor_addr_family(&addr), socktype, protocol);
+      s = tor_open_socket(tor_addr_family(&addr), socktype, is_tcp ? IPPROTO_TCP: IPPROTO_UDP);
       if (!SOCKET_OK(s)) {
         log_warn(LD_NET,"Socket creation failed: %s",
                  tor_socket_strerror(tor_socket_errno(-1)));
