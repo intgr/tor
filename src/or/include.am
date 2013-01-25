@@ -75,6 +75,7 @@ src_or_libtor_a_SOURCES = \
 	$(evdns_source)					\
 	$(tor_platform_source)				\
 	$(onion_ntor_source)				\
+	src/ext/sd-daemon.c				\
 	src/or/config_codedigest.c
 
 #libtor_a_LIBADD = ../common/libor.a ../common/libor-crypto.a \

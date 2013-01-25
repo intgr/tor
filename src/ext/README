@@ -42,3 +42,7 @@ curve25519_donna/*.c
 
     A copy of Adam Langley's curve25519-donna mostly-portable
     implementations of curve25519.
+
+sd-daemon.[ch]
+
+    Helpers for systemd socket activation support on Linux.

@@ -9,7 +9,6 @@
  * \brief General high-level functions to handle reading and writing
  * on connections.
  **/
-#include <systemd/sd-daemon.h>
 
 #include "or.h"
 #include "buffers.h"
@@ -46,6 +45,7 @@
 #include "transports.h"
 #include "routerparse.h"
 #include "transports.h"
+#include "sd-daemon.h"
 
 #ifdef USE_BUFFEREVENTS
 #include <event2/event.h>
