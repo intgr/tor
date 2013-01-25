@@ -938,18 +938,11 @@ make_socket_reuseable(tor_socket_t sock)
 #endif
 }
 
-/** Discover sockets passed in from systemd (when started via socket activation)
- *
- * systemd passes us sockets in arbitrary order. Here we just dump them to a
- * list. Later on, after loading the configuration, we try to match up these
- * sockets to configured ports.
- */
-int
-systemd_discover_sockets(void)
+/** Adopt socket from a file descriptor passed by systemd */
+static pending_socket_t *
+systemd_adopt_socket(tor_socket_t fd)
 {
-  tor_socket_t fd;
-  int n_sock = sd_listen_fds(1);
-  pending_socket_t *sock;
+  pending_socket_t *pend = NULL;
   socklen_t len;
   int type = 0;
   int listening = 0;
@@ -957,57 +950,83 @@ systemd_discover_sockets(void)
   struct sockaddr_storage addrbuf;
   struct sockaddr *saddr = (struct sockaddr*)&addrbuf;
 
+  tor_adopt_socket(fd);
+
+  /* Figure out socket type (SOCK_STREAM/SOCK_DGRAM) */
+  len = sizeof(type);
+  if (getsockopt(fd, SOL_SOCKET, SO_TYPE, &type, &len) < 0)
+    goto err_errno;
+  if (len != sizeof(type) || (type != SOCK_STREAM && type != SOCK_DGRAM))
+  {
+    log_err(LD_NET, "systemd socket %d has unknown type (%d)", fd, type);
+    goto err;
+  }
+
+  /* Make sure it's a listening socket */
+  len = sizeof(listening);
+  if (getsockopt(fd, SOL_SOCKET, SO_ACCEPTCONN, &listening, &len) < 0)
+    goto err_errno;
+  if (len != sizeof(listening) || listening != 1)
+  {
+    log_err(LD_NET, "systemd socket %d is not listening");
+    goto err;
+  }
+
+  /* Get the bound address and port */
+  len = sizeof(addrbuf);
+  memset(&addrbuf, 0, sizeof(addrbuf));
+
+  if (getsockname(fd, (struct sockaddr*)&addrbuf, &len) < 0)
+    goto err_errno;
+  if (len < sizeof(sa_family_t))
+  {
+    log_err(LD_NET, "Cannot determine address of systemd socket %d", fd);
+    goto err;
+  }
+
+  /* All OK, add to pending list */
+  pend = pending_socket_new(fd);
+  pend->type = type;
+  tor_addr_from_sockaddr(&pend->addr, saddr, &pend->port);
+
+  return pend;
+
+err_errno:
+  log_err(LD_NET, "Error adopting systemd socket %d: %s", fd, strerror(errno));
+err:
+  if (pend)
+    tor_free(pend);
+  tor_close_socket(fd);
+  return NULL;
+}
+
+/** Discover sockets passed in from systemd (when started via socket activation)
+ *
+ * systemd passes us sockets in arbitrary order. Here we just dump them to a
+ * list. Later on, after loading the configuration, we try to match up these
+ * sockets to configured ports.
+ *
+ * Sockets that didn't match will be closed and warnings issued later.
+ */
+void
+systemd_discover_sockets(void)
+{
+  tor_socket_t fd;
+  pending_socket_t *pend;
+  int n_sock = sd_listen_fds(1);
+
   log_warn(LD_NET, "Got %d sockets from systemd", n_sock);
 
-  pending_sockets = smartlist_new();
+  if (!pending_sockets)
+    pending_sockets = smartlist_new();
 
   for(fd = SD_LISTEN_FDS_START; fd < (SD_LISTEN_FDS_START + n_sock); fd++)
   {
-    tor_adopt_socket(fd);
+    pend = systemd_adopt_socket(fd);
 
-    /* Make sure it's a socket at all */
-    if (fstat(fd, &sockstat) < 0)
-      goto err;
-    if (!S_ISSOCK(sockstat.st_mode))
-      goto err;
-
-    /* Figure out socket type (SOCK_STREAM/SOCK_DGRAM) */
-    len = sizeof(type);
-    if (getsockopt(fd, SOL_SOCKET, SO_TYPE, &type, &len) < 0)
-      goto err;
-    if (len != sizeof(type))
-      goto err;
-
-    /* Make sure it's a listening socket */
-    len = sizeof(listening);
-    if (getsockopt(fd, SOL_SOCKET, SO_ACCEPTCONN, &listening, &len) < 0)
-      goto err;
-    if (len != sizeof(listening) || listening != 1)
-      goto err;
-
-    /* Get the bind address and port */
-    len = sizeof(addrbuf);
-    memset(&addrbuf, 0, sizeof(addrbuf));
-
-    if (getsockname(fd, (struct sockaddr*)&addrbuf, &len) < 0)
-      goto err;
-    if (len < sizeof(sa_family_t))
-      goto err;
-
-    /* All OK, add to pending list */
-    sock = pending_socket_new(fd);
-    sock->type = type;
-    tor_addr_from_sockaddr(&sock->addr, saddr, &sock->port);
-
-    smartlist_add(pending_sockets, sock);
-    continue;
-
-err:
-    log_err(LD_NET, "Error adopting systemd socket %d, closing", fd);
-    tor_close_socket(fd);
+    if(pend)
+      smartlist_add(pending_sockets, pend);
   }
-
-  return 0;
 }
 
 /** Close sockets passed in from systemd that didn't match any configured

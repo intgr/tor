@@ -116,7 +116,7 @@ void log_failed_proxy_connection(connection_t *conn);
 int get_proxy_addrport(tor_addr_t *addr, uint16_t *port, int *proxy_type,
                        const connection_t *conn);
 
-int systemd_discover_sockets(void);
+void systemd_discover_sockets(void);
 int systemd_finish_sockets(void);
 
 int retry_all_listeners(smartlist_t *replaced_conns,
