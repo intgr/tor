@@ -1016,8 +1016,6 @@ systemd_discover_sockets(void)
   pending_socket_t *pend;
   int n_sock = sd_listen_fds(1);
 
-  log_warn(LD_NET, "Got %d sockets from systemd", n_sock);
-
   if (!pending_sockets)
     pending_sockets = smartlist_new();
 
@@ -1050,13 +1048,13 @@ systemd_finish_sockets(void)
 }
 
 /** Find the socket with a given port number from the sockets passed by
- * systemd. Returns file descriptor when found, -1 when not found.
+ * systemd. Returns file descriptor and removes from pending list when found,
+ * -1 when not found.
  */
 static tor_socket_t
-find_pending_socket(int conntype, int socktype, tor_addr_t *listen_addr, uint16_t port)
+get_pending_socket(int conntype, int socktype, tor_addr_t *listen_addr, uint16_t port)
 {
   tor_socket_t fd;
-  log_warn(LD_NET, "Finding systemd port %u", (unsigned)port);
 
   SMARTLIST_FOREACH_BEGIN(pending_sockets, pending_socket_t *, sock) {
     if (sock->type != socktype || sock->port != port)
@@ -1064,9 +1062,9 @@ find_pending_socket(int conntype, int socktype, tor_addr_t *listen_addr, uint16_
 
     if (tor_addr_compare(listen_addr, &sock->addr, CMP_SEMANTIC) == 0) {
       SMARTLIST_DEL_CURRENT(pending_sockets, sock);
-      log_warn(LD_NET, "Matched systemd socket for %s: %s",
-               conn_type_to_string(conntype),
-               fmt_addrport(&sock->addr, sock->port));
+      log_notice(LD_NET, "Matched systemd socket for %s on %s",
+                 conn_type_to_string(conntype),
+                 fmt_addrport(&sock->addr, sock->port));
       fd = sock->fd;
       tor_free(sock);
       return fd;
@@ -1115,7 +1113,7 @@ connection_listener_new(const struct sockaddr *listensockaddr,
 
     tor_addr_from_sockaddr(&addr, listensockaddr, &usePort);
 
-    s = find_pending_socket(type, socktype, &addr, usePort);
+    s = get_pending_socket(type, socktype, &addr, usePort);
     if (SOCKET_OK(s))
     {
       is_bound = 1;
