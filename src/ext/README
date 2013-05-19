@@ -46,3 +46,4 @@ curve25519_donna/*.c
 sd-daemon.[ch]
 
     Helpers for systemd socket activation support on Linux.
+    http://www.freedesktop.org/wiki/Software/systemd/
