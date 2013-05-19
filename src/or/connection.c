@@ -960,14 +960,17 @@ systemd_adopt_socket(tor_socket_t fd)
     goto err;
   }
 
-  /* Make sure it's a listening socket */
-  len = sizeof(listening);
-  if (getsockopt(fd, SOL_SOCKET, SO_ACCEPTCONN, &listening, &len) < 0)
-    goto err_errno;
-  if (len != sizeof(listening) || listening != 1)
+  /* If it's a stream socket, make sure it's listening */
+  if (type == SOCK_STREAM)
   {
-    log_err(LD_NET, "systemd socket %d is not listening", fd);
-    goto err;
+    len = sizeof(listening);
+    if (getsockopt(fd, SOL_SOCKET, SO_ACCEPTCONN, &listening, &len) < 0)
+      goto err_errno;
+    if (len != sizeof(listening) || listening != 1)
+    {
+      log_err(LD_NET, "systemd socket %d is not listening", fd);
+      goto err;
+    }
   }
 
   /* Get the bound address and port */
