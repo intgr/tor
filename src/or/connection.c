@@ -946,9 +946,7 @@ systemd_adopt_socket(tor_socket_t fd)
   socklen_t len;
   int type = 0;
   int listening = 0;
-  struct stat sockstat;
   struct sockaddr_storage addrbuf;
-  struct sockaddr *saddr = (struct sockaddr*)&addrbuf;
 
   tor_adopt_socket(fd);
 
@@ -968,7 +966,7 @@ systemd_adopt_socket(tor_socket_t fd)
     goto err_errno;
   if (len != sizeof(listening) || listening != 1)
   {
-    log_err(LD_NET, "systemd socket %d is not listening");
+    log_err(LD_NET, "systemd socket %d is not listening", fd);
     goto err;
   }
 
@@ -987,7 +985,7 @@ systemd_adopt_socket(tor_socket_t fd)
   /* All OK, add to pending list */
   pend = pending_socket_new(fd);
   pend->type = type;
-  tor_addr_from_sockaddr(&pend->addr, saddr, &pend->port);
+  tor_addr_from_sockaddr(&pend->addr, (struct sockaddr*)&addrbuf, &pend->port);
 
   return pend;
 
@@ -1020,11 +1018,11 @@ systemd_discover_sockets(void)
   if (!pending_sockets)
     pending_sockets = smartlist_new();
 
-  for(fd = SD_LISTEN_FDS_START; fd < (SD_LISTEN_FDS_START + n_sock); fd++)
+  for (fd = SD_LISTEN_FDS_START; fd < (SD_LISTEN_FDS_START + n_sock); fd++)
   {
     pend = systemd_adopt_socket(fd);
 
-    if(pend)
+    if (pend)
       smartlist_add(pending_sockets, pend);
   }
 }
@@ -1058,12 +1056,12 @@ find_pending_socket(int conntype, int socktype, tor_addr_t *listen_addr, uint16_
   log_warn(LD_NET, "Finding systemd port %u", (unsigned)port);
 
   SMARTLIST_FOREACH_BEGIN(pending_sockets, pending_socket_t *, sock) {
-    if(sock->type != socktype || sock->port != port)
+    if (sock->type != socktype || sock->port != port)
       continue;
 
-    if(tor_addr_compare(listen_addr, &sock->addr, CMP_SEMANTIC) == 0) {
+    if (tor_addr_compare(listen_addr, &sock->addr, CMP_SEMANTIC) == 0) {
       SMARTLIST_DEL_CURRENT(pending_sockets, sock);
-      log_warn(LD_NET, "Found systemd socket for %s: %s",
+      log_warn(LD_NET, "Matched systemd socket for %s: %s",
                conn_type_to_string(conntype),
                fmt_addrport(&sock->addr, sock->port));
       fd = sock->fd;

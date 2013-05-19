@@ -16,7 +16,7 @@
 #include "buffers.h"
 
 /** Temporary container object for pending sockets passed in from parent
- * process.
+ * process, before given sockets are associated with a connection_t.
  */
 typedef struct pending_socket_t {
   tor_socket_t fd;
