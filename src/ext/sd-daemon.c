@@ -43,6 +43,8 @@
 #include <stddef.h>
 #include <limits.h>
 
+#define SD_DAEMON_DISABLE_MQ 1
+
 #if defined(__linux__) && !defined(SD_DAEMON_DISABLE_MQ)
 #  include <mqueue.h>
 #endif

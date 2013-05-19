@@ -3,8 +3,6 @@
 #ifndef foosddaemonhfoo
 #define foosddaemonhfoo
 
-#define SD_DAEMON_DISABLE_MQ 1
-
 /***
   Copyright 2010 Lennart Poettering
 
