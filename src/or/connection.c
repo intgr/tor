@@ -1060,7 +1060,7 @@ get_pending_socket(int conntype, int socktype, tor_addr_t *listen_addr, uint16_t
     if (sock->type != socktype || sock->port != port)
       continue;
 
-    if (tor_addr_compare(listen_addr, &sock->addr, CMP_SEMANTIC) == 0) {
+    if (tor_addr_compare(listen_addr, &sock->addr, CMP_EXACT) == 0) {
       SMARTLIST_DEL_CURRENT(pending_sockets, sock);
       log_notice(LD_NET, "Matched systemd socket for %s on %s",
                  conn_type_to_string(conntype),
