@@ -954,20 +954,17 @@ systemd_adopt_socket(tor_socket_t fd)
   len = sizeof(type);
   if (getsockopt(fd, SOL_SOCKET, SO_TYPE, &type, &len) < 0)
     goto err_errno;
-  if (len != sizeof(type) || (type != SOCK_STREAM && type != SOCK_DGRAM))
-  {
+  if (len != sizeof(type) || (type != SOCK_STREAM && type != SOCK_DGRAM)) {
     log_err(LD_NET, "systemd socket %d has unknown type (%d)", fd, type);
     goto err;
   }
 
   /* If it's a stream socket, make sure it's listening */
-  if (type == SOCK_STREAM)
-  {
+  if (type == SOCK_STREAM) {
     len = sizeof(listening);
     if (getsockopt(fd, SOL_SOCKET, SO_ACCEPTCONN, &listening, &len) < 0)
       goto err_errno;
-    if (len != sizeof(listening) || listening != 1)
-    {
+    if (len != sizeof(listening) || listening != 1) {
       log_err(LD_NET, "systemd socket %d is not listening", fd);
       goto err;
     }
@@ -979,8 +976,7 @@ systemd_adopt_socket(tor_socket_t fd)
 
   if (getsockname(fd, (struct sockaddr*)&addrbuf, &len) < 0)
     goto err_errno;
-  if (len < sizeof(sa_family_t))
-  {
+  if (len < sizeof(sa_family_t)) {
     log_err(LD_NET, "Cannot determine address of systemd socket %d", fd);
     goto err;
   }
@@ -1019,8 +1015,7 @@ systemd_discover_sockets(void)
   if (!pending_sockets)
     pending_sockets = smartlist_new();
 
-  for (fd = SD_LISTEN_FDS_START; fd < (SD_LISTEN_FDS_START + n_sock); fd++)
-  {
+  for (fd = SD_LISTEN_FDS_START; fd < (SD_LISTEN_FDS_START + n_sock); fd++) {
     pend = systemd_adopt_socket(fd);
 
     if (pend)
