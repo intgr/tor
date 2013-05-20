@@ -1106,7 +1106,6 @@ connection_listener_new(const struct sockaddr *listensockaddr,
   if (listensockaddr->sa_family == AF_INET ||
       listensockaddr->sa_family == AF_INET6) {
     int is_tcp = (type != CONN_TYPE_AP_DNS_LISTENER);
-    int is_bound = 0;
     int socktype = is_tcp ? SOCK_STREAM : SOCK_DGRAM;
     if (is_tcp)
       start_reading = 1;
@@ -1114,12 +1113,7 @@ connection_listener_new(const struct sockaddr *listensockaddr,
     tor_addr_from_sockaddr(&addr, listensockaddr, &usePort);
 
     s = get_pending_socket(type, socktype, &addr, usePort);
-    if (SOCKET_OK(s))
-    {
-      is_bound = 1;
-    }
-    else
-    {
+    if (!SOCKET_OK(s)) {
       log_notice(LD_NET, "Opening %s on %s",
                  conn_type_to_string(type), fmt_addrport(&addr, usePort));
 
@@ -1129,32 +1123,29 @@ connection_listener_new(const struct sockaddr *listensockaddr,
                  tor_socket_strerror(tor_socket_errno(-1)));
         goto err;
       }
-    }
 
-    make_socket_reuseable(s);
+      make_socket_reuseable(s);
 
 #ifdef IPV6_V6ONLY
-    if (listensockaddr->sa_family == AF_INET6) {
+      if (listensockaddr->sa_family == AF_INET6) {
 #ifdef _WIN32
-      /* In Redmond, this kind of thing passes for standards-conformance. */
-      DWORD one = 1;
+        /* In Redmond, this kind of thing passes for standards-conformance. */
+        DWORD one = 1;
 #else
-      int one = 1;
+        int one = 1;
 #endif
-      /* We need to set IPV6_V6ONLY so that this socket can't get used for
-       * IPv4 connections. */
-      if (setsockopt(s,IPPROTO_IPV6, IPV6_V6ONLY,
-                     (void*)&one, sizeof(one))<0) {
-        int e = tor_socket_errno(s);
-        log_warn(LD_NET, "Error setting IPV6_V6ONLY flag: %s",
-                 tor_socket_strerror(e));
-        /* Keep going; probably not harmful. */
+        /* We need to set IPV6_V6ONLY so that this socket can't get used for
+         * IPv4 connections. */
+        if (setsockopt(s,IPPROTO_IPV6, IPV6_V6ONLY,
+                       (void*)&one, sizeof(one))<0) {
+          int e = tor_socket_errno(s);
+          log_warn(LD_NET, "Error setting IPV6_V6ONLY flag: %s",
+                   tor_socket_strerror(e));
+          /* Keep going; probably not harmful. */
+        }
       }
-    }
 #endif
 
-    if (!is_bound)
-    {
       if (bind(s,listensockaddr,socklen) < 0) {
         const char *helpfulhint = "";
         int e = tor_socket_errno(s);

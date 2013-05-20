@@ -67,6 +67,7 @@ def exec_tor(config):
 
         if family == AF_INET6:
             sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, True)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
 
         sock.bind((host.strip('[]'), port))
         if socktype != SOCK_DGRAM:
